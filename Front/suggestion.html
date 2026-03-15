@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PACE Tunisie - Accueil</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Rajdhani', sans-serif;
+            background: #F5F7FA;
+            min-height: 100vh;
+            color: #1a1a1a;
+        }
+
+        /* Header - EXACTEMENT comme l'image */
+        .header {
+            background: white;
+            border-bottom: 1px solid #E5E7EB;
+            padding: 0;
+        }
+
+        .header-container {
+            max-width: 100%;
+            margin: 0;
+            padding: 0.85rem 3rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+            text-decoration: none;
+        }
+
+        .logo-icon {
+            width: 36px;
+            height: 36px;
+            background: #0066CC;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 14px;
+        }
+
+        .logo-text {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #1a1a1a;
+            font-family: 'Rajdhani', sans-serif;
+        }
+
+        .nav-menu {
+            display: flex;
+            gap: 2.5rem;
+            align-items: center;
+        }
+
+        .nav-link {
+            text-decoration: none;
+            color: #374151;
+            font-size: 0.95rem;
+            font-weight: 500;
+            transition: color 0.2s;
+            font-family: 'Rajdhani', sans-serif;
+            position: relative;
+        }
+
+        .nav-link:hover {
+            color: #0066CC;
+        }
+
+        .nav-link.active {
+            color: #0066CC;
+            font-weight: 600;
+        }
+
+        .connect-btn {
+            padding: 0.55rem 1.4rem;
+            background: #0066CC;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: 'Rajdhani', sans-serif;
+        }
+
+        .connect-btn:hover {
+            background: #0052a3;
+        }
+
+        /* Main Content */
+        .main-container {
+            max-width: 1280px;
+            margin: 0 auto;
+            padding: 5rem 2rem;
+        }
+
+        .intro-text {
+            text-align: center;
+            max-width: 720px;
+            margin: 0 auto 4rem;
+        }
+
+        .intro-text p {
+            font-size: 1.2rem;
+            line-height: 1.7;
+            color: #4B5563;
+            font-family: 'Rajdhani', sans-serif;
+            font-weight: 500;
+        }
+
+        /* Cards */
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 2rem;
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 2.5rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
+        }
+
+        .card-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .icon-blue {
+            background: #EEF2FF;
+        }
+
+        .icon-cyan {
+            background: #ECFEFF;
+        }
+
+        .card-icon svg {
+            width: 28px;
+            height: 28px;
+        }
+
+        .card-title {
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: #1a1a1a;
+            margin-bottom: 1rem;
+            font-family: 'Orbitron', sans-serif;
+            letter-spacing: -0.5px;
+        }
+
+        .card-description {
+            font-size: 1.1rem;
+            line-height: 1.6;
+            color: #6B7280;
+            margin-bottom: 2rem;
+            font-family: 'Rajdhani', sans-serif;
+            font-weight: 500;
+        }
+
+        .card-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1.25rem;
+            background: transparent;
+            color: #0066CC;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: 'Rajdhani', sans-serif;
+        }
+
+        .card-btn:hover {
+            background: #F3F4F6;
+        }
+
+        .btn-primary {
+            background: #0066CC;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #0052a3;
+        }
+
+        @media (max-width: 1024px) {
+            .nav-menu {
+                display: none;
+            }
+
+            .cards-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .header-container {
+                padding: 0.85rem 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-container">
+            <a href="#" class="logo">
+                <div class="logo-icon">TN</div>
+                <span class="logo-text">PACE Tunisie</span>
+            </a>
+            <nav class="nav-menu">
+                <a href="#" class="nav-link active">Accueil</a>
+                <a href="#" class="nav-link">Opportunités & Secteurs</a>
+                <a href="#" class="nav-link">Présentation & Services</a>
+                <a href="#" class="nav-link">Assistant Virtuel</a>
+            </nav>
+            <button class="connect-btn">Connexion</button>
+        </div>
+    </header>
+
+    <main class="main-container">
+        <div class="intro-text">
+            <p>
+                Ne laissez aucune chance au hasard. Utilisez nos outils intelligents pour 
+                explorer le marché tunisien ou créez un compte pour recevoir des offres 
+                exclusives adaptées à votre profil.
+            </p>
+        </div>
+
+        <div class="cards-grid">
+            <div class="card">
+                <div class="card-icon icon-blue">
+                    <svg viewBox="0 0 24 24" fill="none">
+                        <path d="M12 2C10.9 2 10 2.9 10 4V5C7.24 5 5 7.24 5 10V18C5 19.1 5.9 20 7 20H17C18.1 20 19 19.1 19 18V10C19 7.24 16.76 5 14 5V4C14 2.9 13.1 2 12 2ZM8 11C7.45 11 7 10.55 7 10C7 9.45 7.45 9 8 9C8.55 9 9 9.45 9 10C9 10.55 8.55 11 8 11ZM16 11C15.45 11 15 10.55 15 10C15 9.45 15.45 9 16 9C16.55 9 17 9.45 17 10C17 10.55 16.55 11 16 11ZM12 16C10.34 16 9 14.66 9 13H15C15 14.66 13.66 16 12 16Z" fill="#0066CC"/>
+                    </svg>
+                </div>
+                <h2 class="card-title">Assistant Virtuel Intelligent</h2>
+                <p class="card-description">
+                    Posez vos questions en langage naturel. Notre IA analyse les réglementations et les données économiques pour vous guider instantanément.
+                </p>
+                <button class="card-btn">
+                    Consulter l'assistant
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L12.586 11H5a1 1 0 110-2h7.586l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="card">
+                <div class="card-icon icon-cyan">
+                    <svg viewBox="0 0 24 24" fill="none">
+                        <path d="M12 2L9.19 8.63L2 9.24L7.46 13.97L5.82 21L12 17.27L18.18 21L16.54 13.97L22 9.24L14.81 8.63L12 2Z" fill="#06B6D4"/>
+                    </svg>
+                </div>
+                <h2 class="card-title">Recommandations Sur Mesure</h2>
+                <p class="card-description">
+                    Créez votre profil investisseur. Notre algorithme vous proposera automatiquement les opportunités les plus pertinentes selon vos critères.
+                </p>
+                <button class="card-btn btn-primary">
+                    S'inscrire pour les recommandations
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L12.586 11H5a1 1 0 110-2h7.586l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </main>
+</body>
+</html>

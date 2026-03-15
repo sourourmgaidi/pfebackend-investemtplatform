@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unité d'Assemblage de Câbles Automobiles - PRICE Tunisie</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary-blue: #0066CC;
+            --deep-blue: #004A99;
+            --light-blue: #3D8EDB;
+            --accent-cyan: #00B4D8;
+            --white: #FFFFFF;
+            --off-white: #F8FAFC;
+            --gray-50: #F9FAFB;
+            --gray-100: #F3F4F6;
+            --gray-200: #E5E7EB;
+            --gray-300: #D1D5DB;
+            --gray-600: #4B5563;
+            --gray-700: #374151;
+            --gray-900: #111827;
+            --success-green: #10B981;
+        }
+
+        body {
+            font-family: 'Rajdhani', sans-serif;
+            background: linear-gradient(180deg, #F0F4F8 0%, #E8EDF3 100%);
+            min-height: 100vh;
+            color: var(--gray-900);
+        }
+
+        /* Header / Navigation */
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--gray-200);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            animation: slideDown 0.5s ease-out;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .header-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            text-decoration: none;
+        }
+
+        .logo-icon {
+            width: 42px;
+            height: 42px;
+            background: linear-gradient(135deg, var(--primary-blue), var(--light-blue));
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 16px;
+        }
+
+        .logo-text {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--gray-900);
+        }
+
+        .nav-menu {
+            display: flex;
+            align-items: center;
+            gap: 2.5rem;
+        }
+
+        .nav-link {
+            text-decoration: none;
+            color: var(--gray-700);
+            font-size: 0.95rem;
+            font-weight: 500;
+            transition: color 0.3s ease;
+            position: relative;
+        }
+
+        .nav-link:hover {
+            color: var(--primary-blue);
+        }
+
+        .connect-btn {
+            padding: 0.65rem 1.5rem;
+            background: linear-gradient(135deg, var(--primary-blue), var(--light-blue));
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(0, 102, 204, 0.2);
+        }
+
+        .connect-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 102, 204, 0.3);
+        }
+
+        /* Main Content */
+        .main-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 3rem 2rem;
+            display: grid;
+            grid-template-columns: 1fr 400px;
+            gap: 3rem;
+        }
+
+        .content-section {
+            animation: fadeInUp 0.6s ease-out;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Badges */
+        .badges-row {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .badge-pem {
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(16, 185, 129, 0.1));
+            color: var(--success-green);
+        }
+
+        .badge-sector {
+            background: rgba(0, 102, 204, 0.08);
+            color: var(--primary-blue);
+        }
+
+        .badge-location {
+            background: var(--gray-100);
+            color: var(--gray-700);
+        }
+
+        /* Title */
+        .page-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 3rem;
+            font-weight: 700;
+            color: var(--gray-900);
+            line-height: 1.2;
+            margin-bottom: 1.5rem;
+            letter-spacing: -0.5px;
+        }
+
+        .page-subtitle {
+            font-size: 1.15rem;
+            color: var(--gray-600);
+            line-height: 1.7;
+            margin-bottom: 2.5rem;
+        }
+
+        /* Info Cards */
+        .info-cards {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1.5rem;
+            margin-bottom: 2.5rem;
+        }
+
+        .info-card {
+            background: white;
+            border-radius: 16px;
+            padding: 1.5rem;
+            border: 1px solid var(--gray-200);
+            transition: all 0.3s ease;
+        }
+
+        .info-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+        }
+
+        .info-card-label {
+            font-size: 0.9rem;
+            color: var(--gray-600);
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .info-card-value {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--gray-900);
+        }
+
+        /* Action Buttons */
+        .action-buttons {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 3rem;
+        }
+
+        .btn-primary {
+            flex: 1;
+            padding: 1rem 2rem;
+            background: linear-gradient(135deg, var(--primary-blue), var(--light-blue));
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 16px rgba(0, 102, 204, 0.25);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 24px rgba(0, 102, 204, 0.35);
+        }
+
+        .btn-secondary {
+            padding: 1rem 1.5rem;
+            background: white;
+            color: var(--gray-700);
+            border: 2px solid var(--gray-200);
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--primary-blue);
+            color: var(--primary-blue);
+            transform: translateY(-2px);
+        }
+
+        .btn-icon {
+            width: 20px;
+            height: 20px;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            animation: fadeInUp 0.6s ease-out 0.2s both;
+        }
+
+        .sidebar-card {
+            background: white;
+            border-radius: 20px;
+            padding: 0;
+            border: 1px solid var(--gray-200);
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+        }
+
+        .sidebar-image {
+            width: 100%;
+            height: 300px;
+            background: linear-gradient(135deg, var(--gray-200), var(--gray-100));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--gray-600);
+            font-size: 3rem;
+        }
+
+        .sidebar-content {
+            padding: 2rem;
+        }
+
+        .swot-section {
+            background: white;
+            border-radius: 20px;
+            padding: 2rem;
+            border: 1px solid var(--gray-200);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+            margin-top: 2rem;
+        }
+
+        .sidebar-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--gray-900);
+            margin-bottom: 1.5rem;
+        }
+
+        .detail-item {
+            padding: 1rem 0;
+            border-bottom: 1px solid var(--gray-200);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .detail-item:last-child {
+            border-bottom: none;
+        }
+
+        .detail-label {
+            font-size: 0.9rem;
+            color: var(--gray-600);
+        }
+
+        .detail-value {
+            font-weight: 600;
+            color: var(--gray-900);
+            text-align: right;
+        }
+
+        .indicator-card {
+            background: white;
+            border-radius: 16px;
+            padding: 2rem 1.5rem;
+            border: 1px solid var(--gray-200);
+            transition: all 0.3s ease;
+            min-width: 200px;
+            flex: 1;
+        }
+
+        .indicator-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+            border-color: var(--primary-blue);
+        }
+
+        @media (max-width: 1400px) {
+            .main-container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 1024px) {
+            .nav-menu {
+                display: none;
+            }
+
+            .page-title {
+                font-size: 2rem;
+            }
+
+            .info-cards {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-container">
+            <a href="#" class="logo">
+                <div class="logo-icon">TN</div>
+                <span class="logo-text">PRICE Tunisie</span>
+            </a>
+            <nav class="nav-menu">
+                <a href="#" class="nav-link">Accueil</a>
+                <a href="#" class="nav-link">Opportunités & Secteurs</a>
+                <a href="#" class="nav-link">Présentation & Services</a>
+                <a href="#" class="nav-link">Assistant Virtuel</a>
+            </nav>
+            <button class="connect-btn">Connexion</button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-container">
+        <!-- Left Content -->
+        <div class="content-section">
+            <!-- Badges -->
+            <div class="badges-row">
+                <span class="badge badge-pem">PEM</span>
+                <span class="badge badge-sector">
+                    <span>🏭</span>
+                    <span>Industrie Pharmaceutique</span>
+                </span>
+                <span class="badge badge-location">
+                    <span>📍</span>
+                    <span>Nabeul, Tunisie</span>
+                </span>
+            </div>
+
+            <!-- Title -->
+            <h1 class="page-title">Unité d'Assemblage de Câbles Automobiles</h1>
+            <p class="page-subtitle">
+                Sous-traitance pour les grands constructeurs européens.
+            </p>
+
+            <!-- Info Cards -->
+            <div class="info-cards">
+                <div class="info-card">
+                    <div class="info-card-label">
+                        <span>📅</span>
+                        <span>Date de publication</span>
+                    </div>
+                    <div class="info-card-value">5 février 2025</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-card-label">
+                        <span>📈</span>
+                        <span>Budget estimé</span>
+                    </div>
+                    <div class="info-card-value">15M - 30M TND</div>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="action-buttons">
+                <button class="btn-primary">
+                    <svg class="btn-icon" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M7.707 10.293a1 1 0 10-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 11.586V6h5a2 2 0 012 2v7a2 2 0 01-2 2H4a2 2 0 01-2-2V8a2 2 0 012-2h5v5.586l-1.293-1.293zM9 4a1 1 0 012 0v2H9V4z"/>
+                    </svg>
+                    Sauvegarder
+                </button>
+                <button class="btn-secondary">
+                    <svg class="btn-icon" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M15 8a3 3 0 10-2.977-2.63l-4.94 2.47a3 3 0 100 4.319l4.94 2.47a3 3 0 10.895-1.789l-4.94-2.47a3.027 3.027 0 000-.74l4.94-2.47C13.456 7.68 14.19 8 15 8z"/>
+                    </svg>
+                    Partager
+                </button>
+                <button class="btn-secondary">
+                    <svg class="btn-icon" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                    </svg>
+                    FR
+                </button>
+            </div>
+
+            <!-- Description Section -->
+            <div style="background: white; border-radius: 20px; padding: 2.5rem; border: 1px solid var(--gray-200); margin-bottom: 2rem;">
+                <h2 style="font-family: 'Orbitron', sans-serif; font-size: 1.8rem; font-weight: 700; color: var(--gray-900); margin-bottom: 1.5rem;">
+                    Description du projet
+                </h2>
+                <p style="font-size: 1.05rem; line-height: 1.8; color: var(--gray-700); margin-bottom: 1.5rem;">
+                    Opportunité d'investissement dans une unité moderne d'assemblage de câbles automobiles destinée à la sous-traitance pour les grands constructeurs européens. Le projet vise à établir une installation de production de haute technologie à Nabeul, bénéficiant de la proximité portuaire et d'une main-d'œuvre qualifiée.
+                </p>
+                <p style="font-size: 1.05rem; line-height: 1.8; color: var(--gray-700); margin-bottom: 1.5rem;">
+                    Cette usine produira des faisceaux électriques pour l'industrie automobile, répondant aux normes internationales les plus strictes. Le secteur automobile tunisien connaît une croissance significative, et ce projet s'inscrit dans la stratégie nationale de développement industriel.
+                </p>
+                
+                <h3 style="font-family: 'Orbitron', sans-serif; font-size: 1.4rem; font-weight: 700; color: var(--gray-900); margin: 2rem 0 1rem;">
+                    Avantages clés
+                </h3>
+                <ul style="list-style: none; padding: 0;">
+                    <li style="padding: 0.75rem 0; padding-left: 2rem; position: relative; color: var(--gray-700); font-size: 1.05rem;">
+                        <span style="position: absolute; left: 0; color: var(--primary-blue); font-weight: 700;">✓</span>
+                        Proximité des ports pour l'exportation vers l'Europe
+                    </li>
+                    <li style="padding: 0.75rem 0; padding-left: 2rem; position: relative; color: var(--gray-700); font-size: 1.05rem;">
+                        <span style="position: absolute; left: 0; color: var(--primary-blue); font-weight: 700;">✓</span>
+                        Main-d'œuvre qualifiée et compétitive
+                    </li>
+                    <li style="padding: 0.75rem 0; padding-left: 2rem; position: relative; color: var(--gray-700); font-size: 1.05rem;">
+                        <span style="position: absolute; left: 0; color: var(--primary-blue); font-weight: 700;">✓</span>
+                        Incitations fiscales pour les investissements industriels
+                    </li>
+                    <li style="padding: 0.75rem 0; padding-left: 2rem; position: relative; color: var(--gray-700); font-size: 1.05rem;">
+                        <span style="position: absolute; left: 0; color: var(--primary-blue); font-weight: 700;">✓</span>
+                        Contrats de sous-traitance garantis avec constructeurs européens
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Performance Indicators Section -->
+            <div style="margin-top: 3rem;">
+                <h2 style="font-family: 'Orbitron', sans-serif; font-size: 2rem; font-weight: 700; color: var(--gray-900); margin-bottom: 1rem; letter-spacing: -0.5px;">
+                    Indicateurs de Performance
+                </h2>
+                <p style="font-size: 1.05rem; color: var(--gray-600); line-height: 1.7; margin-bottom: 2.5rem;">
+                    Une analyse synthétique des données financières et économiques clés pour évaluer le potentiel de cette opportunité d'investissement.
+                </p>
+
+                <!-- Indicators Grid -->
+                <div style="display: flex; gap: 1rem; overflow-x: auto;">
+                    <!-- Indicator 1 - ROI -->
+                    <div class="indicator-card">
+                        <div style="width: 40px; height: 40px; background: rgba(0, 102, 204, 0.1); border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-bottom: 1.25rem;">
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="#0066CC">
+                                <path d="M3 3a1 1 0 000 2v8a2 2 0 002 2h2.586l-1.293 1.293a1 1 0 101.414 1.414L10 15.414l2.293 2.293a1 1 0 001.414-1.414L12.414 15H15a2 2 0 002-2V5a1 1 0 100-2H3zm11 4a1 1 0 10-2 0v4a1 1 0 102 0V7zm-3 1a1 1 0 10-2 0v3a1 1 0 102 0V8zM8 9a1 1 0 00-2 0v2a1 1 0 102 0V9z"/>
+                            </svg>
+                        </div>
+                        <div style="font-size: 0.75rem; color: var(--primary-blue); font-weight: 600; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">
+                            RETOUR SUR INVESTISSEMENT (ROI)
+                        </div>
+                        <div style="font-family: 'Orbitron', sans-serif; font-size: 2rem; font-weight: 700; color: var(--gray-900); margin-bottom: 0.75rem;">
+                            9.8%
+                        </div>
+                        <div style="font-size: 0.85rem; color: var(--gray-600); line-height: 1.5;">
+                            Rentabilité estimée basée sur les projections annuelles du secteur.
+                        </div>
+                    </div>
+
+                    <!-- Indicator 2 - Market Size -->
+                    <div class="indicator-card">
+                        <div style="width: 40px; height: 40px; background: rgba(0, 102, 204, 0.1); border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-bottom: 1.25rem;">
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="#0066CC">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
+                            </svg>
+                        </div>
+                        <div style="font-size: 0.75rem; color: var(--primary-blue); font-weight: 600; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">
+                            TAILLE DU MARCHÉ
+                        </div>
+                        <div style="font-family: 'Orbitron', sans-serif; font-size: 2rem; font-weight: 700; color: var(--gray-900); margin-bottom: 0.75rem;">
+                            5000000 TND
+                        </div>
+                        <div style="font-size: 0.85rem; color: var(--gray-600); line-height: 1.5;">
+                            Volume total estimé du marché cible en Tunisie.
+                        </div>
+                    </div>
+
+                    <!-- Indicator 3 - Annual Growth -->
+                    <div class="indicator-card">
+                        <div style="width: 40px; height: 40px; background: rgba(0, 102, 204, 0.1); border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-bottom: 1.25rem;">
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="#0066CC">
+                                <path fill-rule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z" clip-rule="evenodd"/>
+                            </svg>
+                        </div>
+                        <div style="font-size: 0.75rem; color: var(--primary-blue); font-weight: 600; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">
+                            CROISSANCE ANNUELLE
+                        </div>
+                        <div style="font-family: 'Orbitron', sans-serif; font-size: 2rem; font-weight: 700; color: var(--gray-900); margin-bottom: 0.75rem;">
+                            4.5%
+                        </div>
+                        <div style="font-size: 0.85rem; color: var(--gray-600); line-height: 1.5;">
+                            Taux de croissance annuel composé (CAGR) prévu.
+                        </div>
+                    </div>
+
+                    <!-- Indicator 4 - Capital Required -->
+                    <div class="indicator-card">
+                        <div style="width: 40px; height: 40px; background: rgba(0, 102, 204, 0.1); border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-bottom: 1.25rem;">
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="#0066CC">
+                                <path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4z"/>
+                                <path fill-rule="evenodd" d="M18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1zm5-1a1 1 0 100 2h1a1 1 0 100-2H9z" clip-rule="evenodd"/>
+                            </svg>
+                        </div>
+                        <div style="font-size: 0.75rem; color: var(--primary-blue); font-weight: 600; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">
+                            CAPITAL REQUIS
+                        </div>
+                        <div style="font-family: 'Orbitron', sans-serif; font-size: 2rem; font-weight: 700; color: var(--gray-900); margin-bottom: 0.75rem;">
+                            N/A
+                        </div>
+                        <div style="font-size: 0.85rem; color: var(--gray-600); line-height: 1.5;">
+                            Investissement initial minimum pour démarrer le projet.
+                        </div>
+                    </div>
+
+                    <!-- Indicator 5 - Job Creation -->
+                    <div class="indicator-card">
+                        <div style="width: 40px; height: 40px; background: rgba(0, 102, 204, 0.1); border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-bottom: 1.25rem;">
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="#0066CC">
+                                <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z"/>
+                            </svg>
+                        </div>
+                        <div style="font-size: 0.75rem; color: var(--primary-blue); font-weight: 600; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px;">
+                            CRÉATION D'EMPLOIS
+                        </div>
+                        <div style="font-family: 'Orbitron', sans-serif; font-size: 2rem; font-weight: 700; color: var(--gray-900); margin-bottom: 0.75rem;">
+                            100 <span style="font-size: 1rem; font-weight: 500; color: var(--gray-600); font-family: 'Rajdhani', sans-serif;">Postes</span>
+                        </div>
+                        <div style="font-size: 0.85rem; color: var(--gray-600); line-height: 1.5;">
+                            Estimation des emplois directs créés lors de la première phase.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Disclaimer -->
+                <div style="margin-top: 2rem; padding: 1rem; background: rgba(0, 102, 204, 0.05); border-left: 3px solid var(--primary-blue); border-radius: 8px;">
+                    <p style="font-size: 0.85rem; color: var(--gray-600); font-style: italic;">
+                        * Les chiffres sont des estimations basées sur les données actuelles du marché.
+                    </p>
+                </div>
+            </div>
+
+            <!-- SWOT Analysis Section -->
+            <div style="margin-top: 3rem;">
+                <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="#0066CC">
+                        <path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/>
+                    </svg>
+                    <h2 style="font-family: 'Orbitron', sans-serif; font-size: 2rem; font-weight: 700; color: var(--gray-900); letter-spacing: -0.5px; margin: 0;">
+                        Analyse SWOT
+                    </h2>
+                </div>
+                <p style="font-size: 1.05rem; color: var(--gray-600); line-height: 1.7; margin-bottom: 2.5rem; margin-left: 2.5rem;">
+                    Matrice Stratégique
+                </p>
+
+                <!-- SWOT Grid -->
+                <div style="display: grid; grid-template-columns: 1fr; gap: 1.5rem;">
+                    <!-- Forces -->
+                    <div style="background: white; border-radius: 16px; padding: 2rem; border-left: 4px solid #0066CC; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);">
+                        <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;">
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="#0066CC">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                            </svg>
+                            <h3 style="font-family: 'Orbitron', sans-serif; font-size: 1.2rem; font-weight: 700; color: var(--gray-900); margin: 0; letter-spacing: 0.5px;">
+                                FORCES
+                            </h3>
+                        </div>
+                        <p style="font-size: 0.95rem; color: var(--gray-600); margin: 0; padding-left: 2rem;">
+                            Information non disponible pour cette section.
+                        </p>
+                    </div>
+
+                    <!-- Faiblesses -->
+                    <div style="background: white; border-radius: 16px; padding: 2rem; border-left: 4px solid #F59E0B; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);">
+                        <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;">
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="#F59E0B">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                            </svg>
+                            <h3 style="font-family: 'Orbitron', sans-serif; font-size: 1.2rem; font-weight: 700; color: var(--gray-900); margin: 0; letter-spacing: 0.5px;">
+                                FAIBLESSES
+                            </h3>
+                        </div>
+                        <p style="font-size: 0.95rem; color: var(--gray-600); margin: 0; padding-left: 2rem;">
+                            Information non disponible pour cette section.
+                        </p>
+                    </div>
+
+                    <!-- Opportunités -->
+                    <div style="background: white; border-radius: 16px; padding: 2rem; border-left: 4px solid #10B981; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);">
+                        <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;">
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="#10B981">
+                                <path fill-rule="evenodd" d="M12 7a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0V8.414l-4.293 4.293a1 1 0 01-1.414 0L8 10.414l-4.293 4.293a1 1 0 01-1.414-1.414l5-5a1 1 0 011.414 0L11 10.586 14.586 7H12z" clip-rule="evenodd"/>
+                            </svg>
+                            <h3 style="font-family: 'Orbitron', sans-serif; font-size: 1.2rem; font-weight: 700; color: var(--gray-900); margin: 0; letter-spacing: 0.5px;">
+                                OPPORTUNITÉS
+                            </h3>
+                        </div>
+                        <p style="font-size: 0.95rem; color: var(--gray-600); margin: 0; padding-left: 2rem;">
+                            Information non disponible pour cette section.
+                        </p>
+                    </div>
+
+                    <!-- Menaces -->
+                    <div style="background: white; border-radius: 16px; padding: 2rem; border-left: 4px solid #6B7280; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);">
+                        <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;">
+                            <svg width="20" height="20" viewBox="0 0 20 20" fill="#6B7280">
+                                <path fill-rule="evenodd" d="M13.477 14.89A6 6 0 015.11 6.524l8.367 8.368zm1.414-1.414L6.524 5.11a6 6 0 018.367 8.367zM18 10a8 8 0 11-16 0 8 8 0 0116 0z" clip-rule="evenodd"/>
+                            </svg>
+                            <h3 style="font-family: 'Orbitron', sans-serif; font-size: 1.2rem; font-weight: 700; color: var(--gray-900); margin: 0; letter-spacing: 0.5px;">
+                                MENACES
+                            </h3>
+                        </div>
+                        <p style="font-size: 0.95rem; color: var(--gray-600); margin: 0; padding-left: 2rem;">
+                            Information non disponible pour cette section.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-card">
+                <div class="sidebar-image">
+                    🏭
+                </div>
+                <div class="sidebar-content">
+                    <h3 class="sidebar-title">Détails de l'opportunité</h3>
+                    
+                    <div class="detail-item">
+                        <span class="detail-label">Secteur</span>
+                        <span class="detail-value">Industrie Automobile</span>
+                    </div>
+                    
+                    <div class="detail-item">
+                        <span class="detail-label">Localisation</span>
+                        <span class="detail-value">Nabeul, Tunisie</span>
+                    </div>
+                    
+                    <div class="detail-item">
+                        <span class="detail-label">Investissement</span>
+                        <span class="detail-value">15M - 30M TND</span>
+                    </div>
+                    
+                    <div class="detail-item">
+                        <span class="detail-label">Emplois créés</span>
+                        <span class="detail-value">250+</span>
+                    </div>
+                    
+                    <div class="detail-item">
+                        <span class="detail-label">ROI estimé</span>
+                        <span class="detail-value">18% / an</span>
+                    </div>
+                    
+                    <div class="detail-item">
+                        <span class="detail-label">Durée du projet</span>
+                        <span class="detail-value">24 mois</span>
+                    </div>
+                    
+                    <div class="detail-item">
+                        <span class="detail-label">Statut</span>
+                        <span class="detail-value" style="color: var(--success-green);">Actif</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SWOT Analysis Card (Separated) -->
+            <div class="sidebar-card" style="margin-top: 2rem;">
+                <div class="sidebar-content">
+                    <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.5rem;">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0066CC" stroke-width="2">
+                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                        </svg>
+                        <h3 style="font-family: 'Orbitron', sans-serif; font-size: 1.2rem; font-weight: 700; color: var(--gray-900); margin: 0;">
+                            Analyse SWOT
+                        </h3>
+                    </div>
+                    <p style="font-size: 0.85rem; color: var(--gray-600); margin-bottom: 1.5rem;">
+                        Matrice Stratégique
+                    </p>
+
+                    <!-- SWOT Items -->
+                    <div style="display: flex; flex-direction: column; gap: 1rem;">
+                        <!-- Forces -->
+                        <div style="background: var(--gray-50); border-left: 3px solid #0066CC; border-radius: 8px; padding: 0.875rem;">
+                            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                                <svg width="14" height="14" viewBox="0 0 20 20" fill="#0066CC">
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                                </svg>
+                                <h4 style="font-family: 'Orbitron', sans-serif; font-size: 0.85rem; font-weight: 700; color: var(--gray-900); margin: 0;">
+                                    FORCES
+                                </h4>
+                            </div>
+                            <p style="font-size: 0.8rem; color: var(--gray-600); line-height: 1.5; margin: 0;">
+                                Information non disponible pour cette section
+                            </p>
+                        </div>
+
+                        <!-- Faiblesses -->
+                        <div style="background: var(--gray-50); border-left: 3px solid #F59E0B; border-radius: 8px; padding: 0.875rem;">
+                            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                                <svg width="14" height="14" viewBox="0 0 20 20" fill="#F59E0B">
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+                                </svg>
+                                <h4 style="font-family: 'Orbitron', sans-serif; font-size: 0.85rem; font-weight: 700; color: var(--gray-900); margin: 0;">
+                                    FAIBLESSES
+                                </h4>
+                            </div>
+                            <p style="font-size: 0.8rem; color: var(--gray-600); line-height: 1.5; margin: 0;">
+                                Information non disponible pour cette section
+                            </p>
+                        </div>
+
+                        <!-- Opportunités -->
+                        <div style="background: var(--gray-50); border-left: 3px solid #10B981; border-radius: 8px; padding: 0.875rem;">
+                            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                                <svg width="14" height="14" viewBox="0 0 20 20" fill="#10B981">
+                                    <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/>
+                                </svg>
+                                <h4 style="font-family: 'Orbitron', sans-serif; font-size: 0.85rem; font-weight: 700; color: var(--gray-900); margin: 0;">
+                                    OPPORTUNITÉS
+                                </h4>
+                            </div>
+                            <p style="font-size: 0.8rem; color: var(--gray-600); line-height: 1.5; margin: 0;">
+                                Information non disponible pour cette section
+                            </p>
+                        </div>
+
+                        <!-- Menaces -->
+                        <div style="background: var(--gray-50); border-left: 3px solid #64748B; border-radius: 8px; padding: 0.875rem;">
+                            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                                <svg width="14" height="14" viewBox="0 0 20 20" fill="#64748B">
+                                    <path fill-rule="evenodd" d="M13.477 14.89A6 6 0 015.11 6.524l8.367 8.368zm1.414-1.414L6.524 5.11a6 6 0 018.367 8.367zM18 10a8 8 0 11-16 0 8 8 0 0116 0z" clip-rule="evenodd"/>
+                                </svg>
+                                <h4 style="font-family: 'Orbitron', sans-serif; font-size: 0.85rem; font-weight: 700; color: var(--gray-900); margin: 0;">
+                                    MENACES
+                                </h4>
+                            </div>
+                            <p style="font-size: 0.8rem; color: var(--gray-600); line-height: 1.5; margin: 0;">
+                                Information non disponible pour cette section
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </main>
+
+    <script>
+        // Button interactions
+        const buttons = document.querySelectorAll('button');
+        buttons.forEach(button => {
+            button.addEventListener('click', function() {
+                if (this.classList.contains('btn-primary')) {
+                    alert('Projet sauvegardé avec succès!');
+                } else if (this.textContent.includes('Partager')) {
+                    alert('Options de partage...');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

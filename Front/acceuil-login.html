@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PACE Tunisie - Plateforme Nationale Unifiée</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;900&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Rajdhani', sans-serif;
+            background: white;
+            min-height: 100vh;
+            color: #1a1a1a;
+        }
+
+        /* Header */
+        .header {
+            background: white;
+            border-bottom: 1px solid #E5E7EB;
+            padding: 0;
+        }
+
+        .header-container {
+            max-width: 100%;
+            margin: 0;
+            padding: 0.85rem 3rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+            text-decoration: none;
+        }
+
+        .logo-icon {
+            width: 36px;
+            height: 36px;
+            background: #0066CC;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 14px;
+        }
+
+        .logo-text {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #1a1a1a;
+            font-family: 'Rajdhani', sans-serif;
+        }
+
+        .nav-menu {
+            display: flex;
+            gap: 2.5rem;
+            align-items: center;
+        }
+
+        .nav-link {
+            text-decoration: none;
+            color: #374151;
+            font-size: 0.95rem;
+            font-weight: 500;
+            transition: color 0.2s;
+            font-family: 'Rajdhani', sans-serif;
+        }
+
+        .nav-link:hover {
+            color: #0066CC;
+        }
+
+        .nav-link.active {
+            color: #0066CC;
+            font-weight: 600;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 2rem;
+        }
+
+        .mon-espace-link {
+            text-decoration: none;
+            color: #0066CC;
+            font-size: 0.95rem;
+            font-weight: 600;
+            font-family: 'Rajdhani', sans-serif;
+        }
+
+        .user-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: #F3F4F6;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+        }
+
+        /* Hero Section */
+        .hero-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            min-height: calc(100vh - 60px);
+            background: white;
+        }
+
+        .hero-content {
+            padding: 4rem 3rem 4rem 3rem;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #0066CC;
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin-bottom: 2rem;
+            font-family: 'Rajdhani', sans-serif;
+        }
+
+        .hero-badge::before {
+            content: '◆';
+            font-size: 0.6rem;
+        }
+
+        .hero-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 3.5rem;
+            font-weight: 700;
+            color: #1a1a1a;
+            line-height: 1.15;
+            margin-bottom: 1.5rem;
+            letter-spacing: -1px;
+        }
+
+        .hero-description {
+            font-size: 1.2rem;
+            line-height: 1.7;
+            color: #6B7280;
+            margin-bottom: 3rem;
+            max-width: 500px;
+            font-family: 'Rajdhani', sans-serif;
+            font-weight: 500;
+        }
+
+        .hero-buttons {
+            display: flex;
+            gap: 1.5rem;
+            align-items: center;
+        }
+
+        .btn-primary {
+            padding: 1rem 2rem;
+            background: #0066CC;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-family: 'Rajdhani', sans-serif;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-primary:hover {
+            background: #0052a3;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0, 102, 204, 0.3);
+        }
+
+        .btn-secondary {
+            padding: 1rem 2rem;
+            background: transparent;
+            color: #374151;
+            border: none;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-family: 'Rajdhani', sans-serif;
+        }
+
+        .btn-secondary:hover {
+            color: #0066CC;
+        }
+
+        .hero-image {
+            position: relative;
+            background: linear-gradient(135deg, rgba(0, 102, 204, 0.05), rgba(61, 142, 219, 0.05));
+            overflow: hidden;
+        }
+
+        .hero-image::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: url('data:image/svg+xml,<svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg"><defs><pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse"><path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(0,102,204,0.05)" stroke-width="1"/></pattern></defs><rect width="100%" height="100%" fill="url(%23grid)" /></svg>');
+        }
+
+        .hero-visual {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 90%;
+            height: 90%;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600"><rect width="800" height="600" fill="rgba(230,240,250,0.3)"/><circle cx="400" cy="300" r="150" fill="none" stroke="rgba(0,102,204,0.1)" stroke-width="2"/><circle cx="400" cy="300" r="200" fill="none" stroke="rgba(0,102,204,0.08)" stroke-width="2"/><circle cx="400" cy="300" r="250" fill="none" stroke="rgba(0,102,204,0.06)" stroke-width="2"/></svg>') center/contain no-repeat;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 8rem;
+            opacity: 0.6;
+        }
+
+        @media (max-width: 1024px) {
+            .nav-menu {
+                display: none;
+            }
+
+            .hero-section {
+                grid-template-columns: 1fr;
+            }
+
+            .hero-image {
+                min-height: 300px;
+            }
+
+            .hero-content {
+                padding: 3rem 2rem;
+            }
+
+            .hero-title {
+                font-size: 2.5rem;
+            }
+
+            .header-container {
+                padding: 0.85rem 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="header-container">
+            <a href="#" class="logo">
+                <div class="logo-icon">TN</div>
+                <span class="logo-text">PACE Tunisie</span>
+            </a>
+            <nav class="nav-menu">
+                <a href="#" class="nav-link active">Accueil</a>
+                <a href="#" class="nav-link">Opportunités & Secteurs</a>
+                <a href="#" class="nav-link">Présentation & Services</a>
+                <a href="#" class="nav-link">Assistant Virtuel</a>
+            </nav>
+            <div class="header-right">
+                <a href="#" class="mon-espace-link">Mon Espace</a>
+                <div class="user-icon">
+                    <svg width="18" height="18" viewBox="0 0 20 20" fill="#6B7280">
+                        <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd"/>
+                    </svg>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="hero-section">
+        <div class="hero-content">
+            <div class="hero-badge">
+                PLATEFORME NATIONALE UNIFIÉE
+            </div>
+            
+            <h1 class="hero-title">
+                L'Intelligence Économique au Service de la Tunisie
+            </h1>
+            
+            <p class="hero-description">
+                Une plateforme unifiée centralisant les données réglementaires, les opportunités 
+                d'investissement et la richesse culturelle pour guider vos décisions stratégiques.
+            </p>
+            
+            <div class="hero-buttons">
+                <button class="btn-primary">
+                    Commencer maintenant
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L12.586 11H5a1 1 0 110-2h7.586l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                    </svg>
+                </button>
+                <button class="btn-secondary">
+                    Découvrir les services
+                </button>
+            </div>
+        </div>
+
+        <div class="hero-image">
+            <div class="hero-visual">
+                🏙️
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Button animations
+        document.querySelectorAll('.btn-primary, .btn-secondary').forEach(button => {
+            button.addEventListener('click', function() {
+                if (this.textContent.includes('Commencer')) {
+                    console.log('Redirection vers inscription...');
+                } else {
+                    console.log('Redirection vers services...');
+                }
+            });
+        });
+    </script>
+</body>
+</html>
