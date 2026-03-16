@@ -1,4 +1,5 @@
 package tn.iset.investplatformpfe.Entity;
+
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
@@ -47,6 +48,21 @@ public class CollaborationServiceRequest {
     @JoinColumn(name = "admin_id")
     private Admin admin;
 
+    // ===============================
+    // NOUVEAUX CHAMPS POUR LE REJET
+    // ===============================
+    @Column(name = "rejection_reason", length = 1000)
+    private String rejectionReason;  // Raison détaillée du rejet
+
+    @Column(name = "rejected_at")
+    private LocalDateTime rejectedAt;  // Date et heure du rejet
+
+    @Column(name = "rejected_by_admin_id")
+    private Long rejectedByAdminId;  // ID de l'admin qui a rejeté
+
+    @Column(name = "admin_comment", length = 1000)
+    private String adminComment;  // Commentaire supplémentaire (optionnel)
+
     // Constructeurs
     public CollaborationServiceRequest() {
         this.requestDate = LocalDateTime.now();
@@ -63,7 +79,7 @@ public class CollaborationServiceRequest {
         this.status = ServiceStatus.PENDING;
     }
 
-    // Getters et Setters
+    // Getters et Setters existants
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
@@ -96,4 +112,39 @@ public class CollaborationServiceRequest {
 
     public Admin getAdmin() { return admin; }
     public void setAdmin(Admin admin) { this.admin = admin; }
+
+    // ===============================
+    // NOUVEAUX GETTERS ET SETTERS
+    // ===============================
+    public String getRejectionReason() {
+        return rejectionReason;
+    }
+
+    public void setRejectionReason(String rejectionReason) {
+        this.rejectionReason = rejectionReason;
+    }
+
+    public LocalDateTime getRejectedAt() {
+        return rejectedAt;
+    }
+
+    public void setRejectedAt(LocalDateTime rejectedAt) {
+        this.rejectedAt = rejectedAt;
+    }
+
+    public Long getRejectedByAdminId() {
+        return rejectedByAdminId;
+    }
+
+    public void setRejectedByAdminId(Long rejectedByAdminId) {
+        this.rejectedByAdminId = rejectedByAdminId;
+    }
+
+    public String getAdminComment() {
+        return adminComment;
+    }
+
+    public void setAdminComment(String adminComment) {
+        this.adminComment = adminComment;
+    }
 }

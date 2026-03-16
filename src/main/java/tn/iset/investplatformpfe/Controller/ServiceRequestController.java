@@ -1,8 +1,10 @@
 package tn.iset.investplatformpfe.Controller;
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
+import tn.iset.investplatformpfe.Dto.RejectRequestDto;
 import tn.iset.investplatformpfe.Entity.*;
 import tn.iset.investplatformpfe.Service.InvestmentServiceService;
 import tn.iset.investplatformpfe.Service.UserService;
@@ -420,7 +422,7 @@ public class ServiceRequestController {
     public ResponseEntity<?> rejectRequest(
             @AuthenticationPrincipal Jwt jwt,
             @PathVariable Long requestId,
-            @RequestBody Map<String, String> body) {
+            @Valid @RequestBody RejectRequestDto rejectRequest) {  // ✅ Utilisation du DTO avec @Valid
 
         if (jwt == null || !hasRole(jwt, "ADMIN")) {
             return ResponseEntity.status(403).body(Map.of("error", "Accès réservé aux admins"));
@@ -428,13 +430,21 @@ public class ServiceRequestController {
 
         try {
             String adminEmail = jwt.getClaimAsString("email");
-            investmentService.rejectRequest(requestId, adminEmail);
+
+            // ✅ Appel du service avec la raison (plus besoin de validation manuelle)
+            investmentService.rejectRequest(
+                    requestId,
+                    adminEmail,
+                    rejectRequest.getRejectionReason()
+            );
 
             return ResponseEntity.ok(Map.of(
                     "success", true,
-                    "message", "Demande rejetée",
-                    "requestId", requestId
+                    "message", "Demande rejetée avec succès",
+                    "requestId", requestId,
+                    "rejectionReason", rejectRequest.getRejectionReason()
             ));
+
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of(
                     "error", e.getMessage(),

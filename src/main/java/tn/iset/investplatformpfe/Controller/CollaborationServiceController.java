@@ -1,5 +1,6 @@
 package tn.iset.investplatformpfe.Controller;
 
+import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -10,6 +11,8 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import tn.iset.investplatformpfe.Dto.RejectCollaborationRequest;
+import tn.iset.investplatformpfe.Dto.RejectRequestDto;
 import tn.iset.investplatformpfe.Entity.*;
 import tn.iset.investplatformpfe.Service.*;
 import tools.jackson.databind.ObjectMapper;
@@ -239,7 +242,8 @@ public class CollaborationServiceController {
     @PutMapping("/{id}/reject")
     public ResponseEntity<?> rejectService(
             @AuthenticationPrincipal Jwt jwt,
-            @PathVariable Long id) {
+            @PathVariable Long id,
+            @RequestBody RejectCollaborationRequest rejectRequest) {
 
         if (jwt == null) {
             return ResponseEntity.status(401).body(Map.of("error", "Non authentifié"));
@@ -251,9 +255,20 @@ public class CollaborationServiceController {
         }
 
         try {
-            CollaborationService rejected = service.rejectService(id);
+            String adminEmail = jwt.getClaimAsString("email");
+            if (adminEmail == null) {
+                adminEmail = jwt.getSubject(); // Fallback
+            }
+
+            CollaborationService rejected = service.rejectService(
+                    id,
+                    rejectRequest.getRejectionReason(),
+                    adminEmail
+            );
             return ResponseEntity.ok(rejected);
+
         } catch (Exception e) {
+            log.error("❌ Error rejecting collaboration service: {}", e.getMessage());
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
@@ -604,23 +619,34 @@ public class CollaborationServiceController {
     public ResponseEntity<?> rejectRequest(
             @AuthenticationPrincipal Jwt jwt,
             @PathVariable Long requestId,
-            @RequestBody(required = false) Map<String, String> body) {
+            @Valid @RequestBody RejectRequestDto rejectRequest) {
 
         if (jwt == null || !hasRole(jwt, "ADMIN")) {
-            return ResponseEntity.status(403).body(Map.of("error", "Accès réservé aux admins"));
+            return ResponseEntity.status(403).body(Map.of("error", "Access reserved for administrators"));
         }
 
         try {
             String adminEmail = jwt.getClaimAsString("email");
-            service.rejectRequest(requestId, adminEmail);
+
+            service.rejectRequest(
+                    requestId,
+                    adminEmail,
+                    rejectRequest.getRejectionReason()
+            );
 
             return ResponseEntity.ok(Map.of(
                     "success", true,
-                    "message", "Demande rejetée et supprimée",
-                    "requestId", requestId
+                    "message", "Request rejected successfully",
+                    "requestId", requestId,
+                    "rejectionReason", rejectRequest.getRejectionReason()
             ));
+
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            log.error("❌ Error rejecting request {}: {}", requestId, e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", e.getMessage(),
+                    "success", false
+            ));
         }
     }
 

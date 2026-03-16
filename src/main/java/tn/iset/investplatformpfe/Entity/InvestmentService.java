@@ -119,6 +119,18 @@ public class InvestmentService {
     @JsonIgnoreProperties("favoriteServices")
     private List<internationalcompany> favoritedByCompanies = new ArrayList<>();
 
+    // ===============================
+// CHAMPS POUR LE REJET
+// ===============================
+    @Column(name = "rejection_reason", length = 1000)
+    private String rejectionReason;
+
+    @Column(name = "rejected_at")
+    private LocalDateTime rejectedAt;
+
+    @Column(name = "rejected_by_admin_id")
+    private Long rejectedByAdminId;
+
     // ✅ NOUVEAUX CHAMPS POUR LES AUTORISATIONS
     @Column(name = "edit_authorized_until")
     private LocalDateTime editAuthorizedUntil;
@@ -304,4 +316,28 @@ public class InvestmentService {
 
     public List<internationalcompany> getFavoritedByCompanies() { return favoritedByCompanies; }
     public void setFavoritedByCompanies(List<internationalcompany> favoritedByCompanies) { this.favoritedByCompanies = favoritedByCompanies; }
+
+    public String getRejectionReason() {
+        return rejectionReason;
+    }
+
+    public void setRejectionReason(String rejectionReason) {
+        this.rejectionReason = rejectionReason;
+    }
+
+    public LocalDateTime getRejectedAt() {
+        return rejectedAt;
+    }
+
+    public void setRejectedAt(LocalDateTime rejectedAt) {
+        this.rejectedAt = rejectedAt;
+    }
+
+    public Long getRejectedByAdminId() {
+        return rejectedByAdminId;
+    }
+
+    public void setRejectedByAdminId(Long rejectedByAdminId) {
+        this.rejectedByAdminId = rejectedByAdminId;
+    }
 }

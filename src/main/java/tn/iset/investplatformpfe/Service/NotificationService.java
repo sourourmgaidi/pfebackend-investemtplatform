@@ -120,13 +120,31 @@ public class NotificationService {
     // ========================================
     // NOTIFICATION: Service d'investissement rejeté (vers LOCAL_PARTNER)
     // ========================================
+    // ========================================
+// NOTIFICATION: Investment Service Rejected (to LOCAL_PARTNER) - Professional version
+// ========================================
     @Transactional
     public void notifyLocalPartnerInvestmentRejected(InvestmentService service) {
-        log.info("👤 Notification LOCAL_PARTNER - Service rejeté: {}", service.getTitle());
+        log.info("👤 Notification LOCAL_PARTNER - Service rejected: {}", service.getTitle());
 
-        String title = "Service d'investissement rejeté";
-        String message = String.format("Votre service d'investissement '%s' a été rejeté. Contactez l'admin pour plus d'informations.",
-                service.getTitle());
+        String title = "❌ Investment Service Rejected";
+        String message = String.format(
+                "Dear %s %s,\n\n" +
+                        "We regret to inform you that your investment service '%s' (ID: %d) has been rejected.\n\n" +
+                        "Rejection Reason:\n" +
+                        "-----------------\n" +
+                        "%s\n\n" +
+                        "Rejection Date: %s\n\n" +
+                        "If you wish to resubmit a corrected version, please ensure that all requirements are met.\n\n" +
+                        "Best regards,\n" +
+                        "Investment Platform Team",
+                service.getProvider().getFirstName(),
+                service.getProvider().getLastName(),
+                service.getTitle(),
+                service.getId(),
+                service.getRejectionReason() != null ? service.getRejectionReason() : "Reason not specified",
+                service.getRejectedAt() != null ? service.getRejectedAt().toLocalDate().toString() : "Date not specified"
+        );
 
         createNotificationForUser(
                 title,
@@ -406,11 +424,47 @@ public class NotificationService {
     // ========================================
     @Transactional
     public void notifyLocalPartnerServiceRejected(CollaborationService service) {
-        log.info("👤 Notification LOCAL_PARTNER - Service collaboration rejeté: {}", service.getName());
+        log.info("👤 Notification LOCAL_PARTNER - Collaboration service rejected: {}", service.getName());
 
-        String title = "Service Rejected";
-        String message = String.format("Your service '%s' has been rejected. Please contact admin for more information.",
-                service.getName());
+        // ✅ Get the reason (with default value if null)
+        String rejectionReason = service.getRejectionReason();
+        if (rejectionReason == null || rejectionReason.trim().isEmpty()) {
+            rejectionReason = "Reason not specified by administrator";
+        }
+
+        // ✅ Get the rejection date
+        String rejectedDate = service.getRejectedAt() != null ?
+                service.getRejectedAt().toLocalDate().toString() : "Date not specified";
+
+        // ✅ Build detailed message with reason
+        String title = "❌ Collaboration Service Rejected";
+        String message = String.format(
+                "Dear %s %s,\n\n" +
+                        "We regret to inform you that your collaboration service '%s' (ID: %d) has been rejected.\n\n" +
+                        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+                        "❌ REJECTION REASON :\n" +
+                        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+                        "%s\n\n" +
+                        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+                        "📅 Rejection Date : %s\n" +
+                        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n" +
+                        "Service Details:\n" +
+                        "• Requested Budget: %,.2f TND\n" +
+                        "• Region: %s\n" +
+                        "• Activity Domain: %s\n\n" +
+                        "If you wish to resubmit a corrected version, please ensure that all requirements are met.\n\n" +
+                        "Best regards,\n" +
+                        "Investment Platform Team",
+                service.getProvider().getFirstName(),
+                service.getProvider().getLastName(),
+                service.getName(),
+                service.getId(),
+                rejectionReason,
+                rejectedDate,
+                service.getRequestedBudget() != null ? service.getRequestedBudget() : BigDecimal.ZERO,
+                service.getRegion() != null ? service.getRegion().getName() : "Not specified",
+                service.getActivityDomain() != null ? service.getActivityDomain().toString() : "Not specified"
+        );
 
         createNotificationForUser(
                 title,
@@ -419,6 +473,9 @@ public class NotificationService {
                 service.getProvider().getId(),
                 service.getId()
         );
+
+        log.info("✅ Notification sent to partner {} with reason: {}",
+                service.getProvider().getEmail(), rejectionReason);
     }
 
     // ========================================
@@ -473,14 +530,62 @@ public class NotificationService {
     // ========================================
     @Transactional
     public void notifyLocalPartnerTouristRejected(TouristService service) {
-        log.info("👤 Notification LOCAL_PARTNER - Service touristique rejeté: {}", service.getName());
+        log.info("👤 Notification LOCAL_PARTNER - Tourist service rejected: {}", service.getName());
 
-        String title = "Tourist Service Rejected";
-        String message = String.format("Your tourist service '%s' has been rejected. Please contact admin for more information.",
-                service.getName());
+        // ✅ Get the reason (with default value if null)
+        String rejectionReason = service.getRejectionReason();
+        if (rejectionReason == null || rejectionReason.trim().isEmpty()) {
+            rejectionReason = "Reason not specified by administrator";
+        }
 
-        createNotificationForUser(title, message, Role.LOCAL_PARTNER,
-                service.getProvider().getId(), service.getId());
+        // ✅ Get the rejection date
+        String rejectedDate = service.getRejectedAt() != null ?
+                service.getRejectedAt().toLocalDate().toString() : "Date not specified";
+
+        // ✅ Build detailed message with reason
+        String title = "❌ Tourist Service Rejected";
+        String message = String.format(
+                "Dear %s %s,\n\n" +
+                        "We regret to inform you that your tourist service '%s' (ID: %d) has been rejected.\n\n" +
+                        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+                        "❌ REJECTION REASON :\n" +
+                        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+                        "%s\n\n" +
+                        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+                        "📅 Rejection Date : %s\n" +
+                        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n" +
+                        "Service Details:\n" +
+                        "• Price: %,.2f TND\n" +
+                        "• Category: %s\n" +
+                        "• Region: %s\n" +
+                        "• Duration: %d hours\n" +
+                        "• Max Capacity: %d persons\n\n" +
+                        "If you wish to resubmit a corrected version, please ensure that all requirements are met.\n\n" +
+                        "Best regards,\n" +
+                        "Tourism Platform Team",
+                service.getProvider().getFirstName(),
+                service.getProvider().getLastName(),
+                service.getName(),
+                service.getId(),
+                rejectionReason,
+                rejectedDate,
+                service.getPrice() != null ? service.getPrice() : BigDecimal.ZERO,
+                service.getCategory() != null ? service.getCategory().toString() : "Not specified",
+                service.getRegion() != null ? service.getRegion().getName() : "Not specified",
+                service.getDurationHours() != null ? service.getDurationHours() : 0,
+                service.getMaxCapacity() != null ? service.getMaxCapacity() : 0
+        );
+
+        createNotificationForUser(
+                title,
+                message,
+                Role.LOCAL_PARTNER,
+                service.getProvider().getId(),
+                service.getId()
+        );
+
+        log.info("✅ Notification sent to partner {} with reason: {}",
+                service.getProvider().getEmail(), rejectionReason);
     }
 
     // =========================================================================
@@ -565,16 +670,44 @@ public class NotificationService {
     // ========================================
     @Transactional
     public void notifyPartnerRequestRejected(ServiceRequest request) {
-        log.info("👤 Notification PARTENAIRE - Demande rejetée: {}", request.getId());
+        log.info("👤 Notification PARTNER - Request rejected: {}", request.getId());
 
-        String type = request.getRequestType() == RequestType.EDIT ? "modification" : "suppression";
-        String title = "❌ Demande de " + type + " rejetée";
+        String type = request.getRequestType() == RequestType.EDIT ? "modification" : "deletion";
+
+        // ✅ Get rejection reason from admin
+        String rejectionReason = request.getRejectionReason();
+        if (rejectionReason == null || rejectionReason.trim().isEmpty()) {
+            rejectionReason = "Reason not specified by administrator";
+        }
+
+        // ✅ Get rejection date
+        String rejectedDate = request.getRejectedAt() != null ?
+                request.getRejectedAt().toLocalDate().toString() : "Date not specified";
+
+        String title = "❌ " + (type.equals("modification") ? "Modification" : "Deletion") + " Request Rejected";
+
         String message = String.format(
-                "Votre demande de %s pour le service '%s' a été rejetée par l'admin.\n" +
-                        "Raison de votre demande: %s",
+                "Dear %s %s,\n\n" +
+                        "Your %s request for service '%s' (ID: %d) has been rejected by the administrator.\n\n" +
+                        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+                        "❌ REJECTION REASON :\n" +
+                        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+                        "%s\n\n" +
+                        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+                        "📅 Rejection Date : %s\n" +
+                        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n" +
+                        "Your initial request reason : %s\n\n" +
+                        "If you wish to submit a new request, please take the above comments into consideration.\n\n" +
+                        "Best regards,\n" +
+                        "The Administration Team",
+                request.getPartner().getFirstName(),
+                request.getPartner().getLastName(),
                 type,
                 request.getService().getTitle(),
-                request.getReason()
+                request.getService().getId(),
+                rejectionReason,
+                rejectedDate,
+                request.getReason() != null ? request.getReason() : "Not specified"
         );
 
         createNotificationForUser(
@@ -584,6 +717,9 @@ public class NotificationService {
                 request.getPartner().getId(),
                 request.getService().getId()
         );
+
+        log.info("✅ Notification sent to partner {} with reason: {}",
+                request.getPartner().getEmail(), rejectionReason);
     }
 
     // ========================================
@@ -893,16 +1029,44 @@ public class NotificationService {
      */
     @Transactional
     public void notifyPartnerCollaborationRequestRejected(CollaborationServiceRequest request) {
-        log.info("👤 Notification PARTENAIRE - Demande collaboration rejetée: {}", request.getId());
+        log.info("👤 Notification PARTNER - Collaboration request rejected: {}", request.getId());
 
-        String type = request.getRequestType() == RequestType.EDIT ? "modification" : "suppression";
-        String title = "❌ Demande de " + type + " rejetée (Collaboration)";
+        String type = request.getRequestType() == RequestType.EDIT ? "modification" : "deletion";
+
+        // ✅ Get rejection reason from admin
+        String rejectionReason = request.getRejectionReason();
+        if (rejectionReason == null || rejectionReason.trim().isEmpty()) {
+            rejectionReason = "Reason not specified by administrator";
+        }
+
+        // ✅ Get rejection date
+        String rejectedDate = request.getRejectedAt() != null ?
+                request.getRejectedAt().toLocalDate().toString() : "Date not specified";
+
+        String title = "❌ " + (type.equals("modification") ? "Modification" : "Deletion") + " Request Rejected (Collaboration)";
+
         String message = String.format(
-                "Votre demande de %s pour le service de collaboration '%s' a été rejetée par l'admin.\n" +
-                        "Raison de votre demande: %s",
+                "Dear %s %s,\n\n" +
+                        "Your %s request for collaboration service '%s' (ID: %d) has been rejected by the administrator.\n\n" +
+                        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+                        "❌ REJECTION REASON :\n" +
+                        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+                        "%s\n\n" +
+                        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+                        "📅 Rejection Date : %s\n" +
+                        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n" +
+                        "Your initial request reason : %s\n\n" +
+                        "If you wish to submit a new request, please take the above comments into consideration.\n\n" +
+                        "Best regards,\n" +
+                        "The Administration Team",
+                request.getPartner().getFirstName(),
+                request.getPartner().getLastName(),
                 type,
                 request.getService().getName(),
-                request.getReason()
+                request.getService().getId(),
+                rejectionReason,
+                rejectedDate,
+                request.getReason() != null ? request.getReason() : "Not specified"
         );
 
         createNotificationForUser(
@@ -912,8 +1076,10 @@ public class NotificationService {
                 request.getPartner().getId(),
                 request.getService().getId()
         );
-    }
 
+        log.info("✅ Notification sent to partner {} with reason: {}",
+                request.getPartner().getEmail(), rejectionReason);
+    }
     /**
      * Partenaire local - Service de collaboration supprimé par admin
      */

@@ -789,18 +789,47 @@ public class InvestmentServiceService {
     // ADMIN: Rejeter un service
     // ========================================
     @Transactional
-    public InvestmentService rejectInvestmentService(Long id) {
+    public InvestmentService rejectInvestmentService(Long id, String rejectionReason, String adminEmail) {
         log.info("🔴 ===== REJETER SERVICE =====");
-        log.info("🔴 ID: {}", id);
+        log.info("🔴 ID: {}, Admin: {}", id, adminEmail);
+        log.info("🔴 Raison: {}", rejectionReason);
 
+        // ✅ 1. VALIDATION de la raison
+        if (rejectionReason == null || rejectionReason.trim().isEmpty()) {
+            log.error("❌ Raison de rejet manquante");
+            throw new RuntimeException("La raison du rejet est obligatoire");
+        }
+
+        // ✅ 2. RÉCUPÉRATION du service
         InvestmentService service = getInvestmentServiceById(id);
         log.info("🔴 Service trouvé: {}", service.getTitle());
         log.info("🔴 Statut actuel: {}", service.getStatus());
 
+        // ✅ 3. VÉRIFICATION que le service est en attente
+        if (service.getStatus() != ServiceStatus.PENDING) {
+            log.error("❌ Tentative de rejet d'un service qui n'est pas en attente - Statut: {}", service.getStatus());
+            throw new RuntimeException("Seuls les services en attente peuvent être rejetés");
+        }
+
+        // ✅ 4. RÉCUPÉRATION de l'admin
+        Admin admin = adminRepository.findByEmail(adminEmail)
+                .orElseThrow(() -> {
+                    log.error("❌ Admin non trouvé avec email: {}", adminEmail);
+                    return new RuntimeException("Admin non trouvé");
+                });
+
+        // ✅ 5. MISE À JOUR du service avec toutes les informations de rejet
         service.setStatus(ServiceStatus.REJECTED);
+        service.setRejectionReason(rejectionReason);
+        service.setRejectedAt(LocalDateTime.now());
+        service.setRejectedByAdminId(admin.getId());
+
+        // ✅ 6. SAUVEGARDE
         InvestmentService rejected = investmentRepository.save(service);
         log.info("🔴 Service rejeté avec ID: {}", rejected.getId());
+        log.info("🔴 Raison enregistrée: {}", rejected.getRejectionReason());
 
+        // ✅ 7. NOTIFICATION au partenaire local
         log.info("🔴 Appel notifyLocalPartnerInvestmentRejected");
         notificationService.notifyLocalPartnerInvestmentRejected(rejected);
 
@@ -983,10 +1012,20 @@ public class InvestmentServiceService {
     /**
      * Admin : Rejeter une demande
      */
+    /**
+     * Admin : Rejeter une demande avec raison
+     */
     @Transactional
-    public void rejectRequest(Long requestId, String adminEmail) {
-        log.info("🔐 Admin {} rejette la demande ID: {}", adminEmail, requestId);
+    public void rejectRequest(Long requestId, String adminEmail, String rejectionReason) {
+        log.info("🔐 Admin {} rejette la demande ID: {} avec raison: {}", adminEmail, requestId, rejectionReason);
 
+        // ✅ 1. VALIDATION de la raison
+        if (rejectionReason == null || rejectionReason.trim().isEmpty()) {
+            log.error("❌ Raison de rejet manquante");
+            throw new RuntimeException("La raison du rejet est obligatoire");
+        }
+
+        // ✅ 2. RÉCUPÉRATION de la demande
         ServiceRequest request = serviceRequestRepository.findById(requestId)
                 .orElseThrow(() -> new RuntimeException("Demande non trouvée"));
 
@@ -994,17 +1033,26 @@ public class InvestmentServiceService {
             throw new RuntimeException("Cette demande a déjà été traitée");
         }
 
+        // ✅ 3. RÉCUPÉRATION de l'admin
         Admin admin = adminRepository.findByEmail(adminEmail)
                 .orElseThrow(() -> new RuntimeException("Admin non trouvé"));
 
-        // ✅ NOTIFICATION avant suppression
+        // ✅ 4. ENREGISTRER la raison de rejet dans la demande
+        request.setRejectionReason(rejectionReason);
+        request.setRejectedAt(LocalDateTime.now());
+        request.setRejectedByAdminId(admin.getId());
+        request.setStatus(ServiceStatus.REJECTED);
+        request.setResponseDate(LocalDateTime.now());
+        request.setAdmin(admin);
+
+        // ✅ 5. SAUVEGARDER la demande avec la raison (pour historique)
+        serviceRequestRepository.save(request);
+
+        // ✅ 6. NOTIFICATION au partenaire avec la raison
         notificationService.notifyPartnerRequestRejected(request);
 
-        // ❌ SUPPRIMER directement la demande
-        serviceRequestRepository.delete(request);
-        log.info("📝 Demande ID: {} supprimée après rejet", requestId);
-
-        log.info("✅ Demande rejetée et supprimée");
+        log.info("✅ Demande ID: {} rejetée avec raison: {}", requestId, rejectionReason);
+        log.info("✅ Partenaire {} notifié avec la raison", request.getPartner().getEmail());
     }
 
     // ========================================

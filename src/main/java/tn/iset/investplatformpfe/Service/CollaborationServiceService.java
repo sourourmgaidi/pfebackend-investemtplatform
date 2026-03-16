@@ -669,13 +669,51 @@ public class CollaborationServiceService {
     // ADMIN: Reject service
     // ========================================
     @Transactional
-    public CollaborationService rejectService(Long id) {
-        CollaborationService service = getCollaborationServiceById(id);
-        service.setStatus(ServiceStatus.REJECTED);
-        CollaborationService rejected = repository.save(service);
+    public CollaborationService rejectService(Long id, String rejectionReason, String adminEmail) {
+        log.info("🔴 ===== REJECT COLLABORATION SERVICE =====");
+        log.info("🔴 ID: {}, Admin: {}", id, adminEmail);
+        log.info("🔴 Reason: {}", rejectionReason);
 
+        // ✅ 1. VALIDATE reason
+        if (rejectionReason == null || rejectionReason.trim().isEmpty()) {
+            log.error("❌ Rejection reason is missing");
+            throw new RuntimeException("Rejection reason is required");
+        }
+
+        // ✅ 2. GET service
+        CollaborationService service = getCollaborationServiceById(id);
+        log.info("🔴 Service found: {}", service.getName());
+        log.info("🔴 Current status: {}", service.getStatus());
+
+        // ✅ 3. VERIFY service is PENDING
+        if (service.getStatus() != ServiceStatus.PENDING) {
+            log.error("❌ Attempt to reject a service that is not pending - Status: {}", service.getStatus());
+            throw new RuntimeException("Only pending services can be rejected");
+        }
+
+        // ✅ 4. GET admin (optional - if you want to track who rejected)
+        if (adminEmail != null && !adminEmail.isEmpty()) {
+            adminRepository.findByEmail(adminEmail).ifPresent(admin -> {
+                service.setRejectedByAdminId(admin.getId());
+                log.info("🔴 Admin recorded: {}", admin.getEmail());
+            });
+        }
+
+        // ✅ 5. UPDATE service with rejection information
+        service.setStatus(ServiceStatus.REJECTED);
+        service.setRejectionReason(rejectionReason);
+        service.setRejectedAt(LocalDateTime.now());
+
+        // ✅ 6. SAVE
+        CollaborationService rejected = repository.save(service);
+        log.info("🔴 Service rejected with ID: {}", rejected.getId());
+        log.info("🔴 Reason saved: {}", rejected.getRejectionReason());
+
+        // ✅ 7. NOTIFY local partner (you'll need to update this method too)
+        log.info("🔴 Calling notifyLocalPartnerServiceRejected");
         notificationService.notifyLocalPartnerServiceRejected(rejected);
 
+        log.info("🔴 ===== END REJECT =====");
         return rejected;
     }
 
@@ -900,46 +938,60 @@ public class CollaborationServiceService {
     }
 
     /**
-     * Admin: Reject a request (Collaboration) - La demande est supprimée après rejet
+     * Admin: Reject a request (Collaboration) with reason - La demande est supprimée après rejet
      */
     @Transactional
-    public void rejectRequest(Long requestId, String adminEmail) {
-        log.info("🔐 Admin {} rejects request ID: {}", adminEmail, requestId);
+    public void rejectRequest(Long requestId, String adminEmail, String rejectionReason) {
+        log.info("🔐 Admin {} rejects request ID: {} with reason: {}", adminEmail, requestId, rejectionReason);
 
+        // ✅ 1. VALIDATION de la raison
+        if (rejectionReason == null || rejectionReason.trim().isEmpty()) {
+            log.error("❌ Rejection reason is missing");
+            throw new RuntimeException("Rejection reason is required");
+        }
+
+        // ✅ 2. Récupération de la demande
         CollaborationServiceRequest request = collaborationRequestRepository.findById(requestId)
                 .orElseThrow(() -> new RuntimeException("Request not found"));
 
         if (request.getStatus() != ServiceStatus.PENDING) {
+            log.error("❌ Request already processed - Status: {}", request.getStatus());
             throw new RuntimeException("This request has already been processed");
         }
 
+        // ✅ 3. Récupération de l'admin
         Admin admin = adminRepository.findByEmail(adminEmail)
                 .orElseThrow(() -> new RuntimeException("Admin not found"));
 
-        CollaborationService service = request.getService();
-        String serviceName = service.getName();
-        Long serviceId = service.getId();
-        RequestType requestType = request.getRequestType();
+        // ✅ 4. Sauvegarder les informations pour la notification AVANT suppression
         String partnerEmail = request.getPartner().getEmail();
+        String serviceName = request.getService().getName();
+        Long serviceId = request.getService().getId();
+        RequestType requestType = request.getRequestType();
+        String initialReason = request.getReason();
 
-        // ❌ SUPPRIMER directement la demande
-        collaborationRequestRepository.delete(request);
-        log.info("📝 Request ID: {} deleted after rejection", requestId);
+        // ✅ 5. Définir les informations de rejet (pour la notification)
+        request.setRejectionReason(rejectionReason);
+        request.setRejectedAt(LocalDateTime.now());
+        request.setRejectedByAdminId(admin.getId());
+        request.setStatus(ServiceStatus.REJECTED);
+        request.setResponseDate(LocalDateTime.now());
+        request.setAdmin(admin);
 
-        // NOTIFICATION: Local partner (à adapter)
+        // ✅ 6. NOTIFICATION au partenaire local (AVANT suppression)
         try {
-            // Vous devrez créer cette méthode dans NotificationService
             notificationService.notifyPartnerCollaborationRequestRejected(request);
             log.info("📢 Notification sent to partner: {}", partnerEmail);
         } catch (Exception e) {
             log.error("❌ Error sending notification: {}", e.getMessage());
         }
 
+        // ❌ 7. SUPPRIMER la demande
+        collaborationRequestRepository.delete(request);
+        log.info("📝 Request ID: {} deleted after rejection with reason: {}", requestId, rejectionReason);
 
-
-        log.info("✅ Request rejected and deleted");
+        log.info("✅ Request rejected and deleted successfully");
     }
-
     // ========================================
     // PART 3: METHODS TO RETRIEVE REQUESTS (Collaboration)
     // ========================================

@@ -1,5 +1,6 @@
 package tn.iset.investplatformpfe.Controller;
 
+import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -10,6 +11,8 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import tn.iset.investplatformpfe.Dto.RejectTouristRequest;
+import tn.iset.investplatformpfe.Dto.RejectTouristRequestDto;
 import tn.iset.investplatformpfe.Entity.*;
 import tn.iset.investplatformpfe.Repository.LocalPartnerRepository;
 import tn.iset.investplatformpfe.Service.FileStorageService;
@@ -73,18 +76,45 @@ public class TouristServiceController {
         }
     }
 
-    // ✅ PUT rejeter un service (ADMIN uniquement)
+    // ✅ PUT rejeter un service (ADMIN uniquement) avec raison
     @PreAuthorize("hasRole('ADMIN')")
     @PutMapping("/{id}/reject")
-    public ResponseEntity<?> rejectService(@PathVariable Long id) {
+    public ResponseEntity<?> rejectService(
+            @PathVariable Long id,
+            @RequestBody RejectTouristRequest rejectRequest,
+            @AuthenticationPrincipal Jwt jwt) {
+
+        log.info("📨 Request to reject tourist service ID: {} with reason", id);
+
         try {
-            TouristService rejected = touristServiceService.rejectService(id);
+            String adminEmail = jwt.getClaimAsString("email");
+            if (adminEmail == null) {
+                adminEmail = jwt.getSubject(); // Fallback
+            }
+
+            TouristService rejected = touristServiceService.rejectService(
+                    id,
+                    rejectRequest.getRejectionReason(),
+                    adminEmail
+            );
+
             return ResponseEntity.ok(Map.of(
-                    "message", "Service rejeté (en attente de suppression par le partenaire)",
-                    "service", rejected
+                    "message", "Service rejected successfully",
+                    "service", rejected,
+                    "rejectionReason", rejected.getRejectionReason(),
+                    "rejectedAt", rejected.getRejectedAt()
             ));
+
         } catch (RuntimeException e) {
-            return ResponseEntity.notFound().build();
+            log.error("❌ Error rejecting tourist service: {}", e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", e.getMessage()
+            ));
+        } catch (Exception e) {
+            log.error("❌ Unexpected error: {}", e.getMessage());
+            return ResponseEntity.status(500).body(Map.of(
+                    "error", "Internal server error: " + e.getMessage()
+            ));
         }
     }
 
@@ -303,22 +333,41 @@ public class TouristServiceController {
         }
     }
 
-    // ✅ Admin: Rejeter une demande
+    // ✅ Admin: Rejeter une demande avec DTO
     @PreAuthorize("hasRole('ADMIN')")
     @PutMapping("/admin/requests/{requestId}/reject")
-    public ResponseEntity<?> rejectRequest(@PathVariable Long requestId,
-                                           @RequestBody Map<String, String> request,
-                                           @AuthenticationPrincipal Jwt jwt) {
+    public ResponseEntity<?> rejectRequest(
+            @PathVariable Long requestId,
+            @Valid @RequestBody RejectTouristRequestDto rejectRequest,
+            @AuthenticationPrincipal Jwt jwt) {
+
+        log.info("📨 Request to reject tourist service request ID: {}", requestId);
+
         try {
             String adminEmail = jwt.getClaimAsString("email");
-            String rejectionReason = request.get("rejectionReason");
-            touristServiceService.rejectRequest(requestId, adminEmail, rejectionReason);
+            if (adminEmail == null) {
+                adminEmail = jwt.getSubject();
+            }
+
+            touristServiceService.rejectRequest(
+                    requestId,
+                    adminEmail,
+                    rejectRequest.getRejectionReason()
+            );
+
             return ResponseEntity.ok(Map.of(
-                    "message", "✅ Demande rejetée",
-                    "requestId", requestId
+                    "success", true,
+                    "message", "✅ Request rejected successfully",
+                    "requestId", requestId,
+                    "rejectionReason", rejectRequest.getRejectionReason()
             ));
+
         } catch (RuntimeException e) {
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+            log.error("❌ Error rejecting request {}: {}", requestId, e.getMessage());
+            return ResponseEntity.badRequest().body(Map.of(
+                    "success", false,
+                    "error", e.getMessage()
+            ));
         }
     }
 

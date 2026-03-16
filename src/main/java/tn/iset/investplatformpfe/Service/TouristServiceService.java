@@ -88,18 +88,51 @@ public class TouristServiceService {
     }
 
     // ✅ PUT rejeter un service (pour admin)
-    public TouristService rejectService(Long id) {
-        TouristService service = getServiceById(id);
+    public TouristService rejectService(Long id, String rejectionReason, String adminEmail) {
+        log.info("🔴 ===== REJECT TOURIST SERVICE =====");
+        log.info("🔴 ID: {}, Admin: {}", id, adminEmail);
+        log.info("🔴 Reason: {}", rejectionReason);
 
+        // ✅ 1. VALIDATE reason
+        if (rejectionReason == null || rejectionReason.trim().isEmpty()) {
+            log.error("❌ Rejection reason is missing");
+            throw new RuntimeException("Rejection reason is required");
+        }
+
+        // ✅ 2. GET service
+        TouristService service = getServiceById(id);
+        log.info("🔴 Service found: {}", service.getName());
+        log.info("🔴 Current status: {}", service.getStatus());
+
+        // ✅ 3. VERIFY service is PENDING
         if (service.getStatus() != ServiceStatus.PENDING) {
+            log.error("❌ Attempt to reject a service that is not pending - Status: {}", service.getStatus());
             throw new RuntimeException("Only PENDING services can be rejected. Current status: " + service.getStatus());
         }
 
-        service.setStatus(ServiceStatus.REJECTED);
-        TouristService saved = touristServiceRepository.save(service);
+        // ✅ 4. GET admin (optional - for tracking)
+        if (adminEmail != null && !adminEmail.isEmpty()) {
+            adminRepository.findByEmail(adminEmail).ifPresent(admin -> {
+                service.setRejectedByAdminId(admin.getId());
+                log.info("🔴 Admin recorded: {}", admin.getEmail());
+            });
+        }
 
+        // ✅ 5. UPDATE service with rejection information
+        service.setStatus(ServiceStatus.REJECTED);
+        service.setRejectionReason(rejectionReason);
+        service.setRejectedAt(LocalDateTime.now());
+
+        // ✅ 6. SAVE
+        TouristService saved = touristServiceRepository.save(service);
+        log.info("🔴 Service rejected with ID: {}", saved.getId());
+        log.info("🔴 Reason saved: {}", saved.getRejectionReason());
+
+        // ✅ 7. NOTIFY local partner
+        log.info("🔴 Calling notifyLocalPartnerTouristRejected");
         notificationService.notifyLocalPartnerTouristRejected(saved);
 
+        log.info("🔴 ===== END REJECT =====");
         return saved;
     }
 
@@ -415,22 +448,27 @@ public class TouristServiceService {
         notificationService.createNotificationForUser(adminTitle, adminMessage, Role.ADMIN, admin.getId(), serviceId);
     }
 
-    // ✅ Admin: Rejeter une demande
+    // ✅ Admin: Rejeter une demande (Tourist Service)
     @Transactional
     public void rejectRequest(Long requestId, String adminEmail, String rejectionReason) {
-        log.info("🔐 Admin {} rejects request ID: {}", adminEmail, requestId);
+        log.info("🔐 Admin {} rejects tourist service request ID: {} with reason: {}", adminEmail, requestId, rejectionReason);
 
+        // Validation de la raison
         if (rejectionReason == null || rejectionReason.trim().isEmpty()) {
+            log.error("❌ Rejection reason is missing");
             throw new RuntimeException("Rejection reason is required. Please explain why you are rejecting this request.");
         }
 
+        // Récupération de la demande
         TouristServiceRequest request = touristServiceRequestRepository.findById(requestId)
                 .orElseThrow(() -> new RuntimeException("Request not found with id: " + requestId));
 
         if (request.getStatus() != ServiceStatus.PENDING) {
+            log.error("❌ Request already processed - Status: {}", request.getStatus());
             throw new RuntimeException("This request has already been processed. Current status: " + request.getStatus());
         }
 
+        // Récupération de l'admin
         Admin admin = adminRepository.findByEmail(adminEmail)
                 .orElseThrow(() -> new RuntimeException("Admin not found with email: " + adminEmail));
 
@@ -443,25 +481,54 @@ public class TouristServiceService {
         String partnerFirstName = request.getPartner().getFirstName();
         String partnerLastName = request.getPartner().getLastName();
         RequestType requestType = request.getRequestType();
+        String initialReason = request.getReason();
+
+        // ✅ Date de rejet
+        LocalDateTime rejectedAt = LocalDateTime.now();
 
         // ❌ SUPPRIMER DIRECTEMENT LA DEMANDE
         touristServiceRequestRepository.delete(request);
         log.info("✅ Request ID: {} deleted after rejection", requestId);
 
-        // Notifications
-        String partnerTitle = "❌ " + (requestType == RequestType.EDIT ? "Edit" : "Delete") + " request rejected";
-        String partnerMessage = String.format(
-                "Your %s request for service '%s' has been rejected by the administrator.\n" +
-                        "Rejection reason: %s",
-                requestType == RequestType.EDIT ? "edit" : "delete",
+        // ✅ NOTIFICATION au partenaire (message détaillé)
+        String type = requestType == RequestType.EDIT ? "modification" : "deletion";
+        String title = "❌ " + (requestType == RequestType.EDIT ? "Edit" : "Delete") + " Request Rejected - Tourist Service";
+
+        String message = String.format(
+                "Dear %s %s,\n\n" +
+                        "Your %s request for tourist service '%s' (ID: %d) has been rejected by the administrator.\n\n" +
+                        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+                        "❌ REJECTION REASON :\n" +
+                        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+                        "%s\n\n" +
+                        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+                        "📅 Rejection Date : %s\n" +
+                        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n" +
+                        "Your initial request reason : %s\n\n" +
+                        "If you wish to submit a new request, please take the above comments into consideration.\n\n" +
+                        "Best regards,\n" +
+                        "The Tourism Platform Team",
+                partnerFirstName,
+                partnerLastName,
+                type,
                 serviceName,
-                rejectionReason
+                serviceId,
+                rejectionReason,
+                rejectedAt.toLocalDate().toString(),
+                initialReason != null ? initialReason : "Not specified"
         );
-        notificationService.createNotificationForUser(partnerTitle, partnerMessage, Role.LOCAL_PARTNER,
-                request.getPartner().getId(), serviceId);
 
+        notificationService.createNotificationForUser(
+                title,
+                message,
+                Role.LOCAL_PARTNER,
+                request.getPartner().getId(),
+                serviceId
+        );
 
-            }
+        log.info("✅ Notification sent to partner {} for rejected {} request: {}",
+                partnerEmail, type, rejectionReason);
+    }
 
     // ================ QUERY METHODS POUR LES DEMANDES ================
 

@@ -126,23 +126,24 @@ public class CollaborationService {
     // ===============================
     @Column(updatable = false)
     private LocalDateTime createdAt;
+    // ===============================
+// CHAMPS POUR LE REJET
+// ===============================
+    @Column(name = "rejection_reason", length = 1000)
+    private String rejectionReason;
 
+    @Column(name = "rejected_at")
+    private LocalDateTime rejectedAt;
+
+    @Column(name = "rejected_by_admin_id")
+    private Long rejectedByAdminId;
     // ===============================
     // Constructeurs
     // ===============================
     public CollaborationService() {
     }
 
-    public CollaborationService(Long id, String name, String description,
-                                Region region, LocalPartner provider,
-                                BigDecimal requestedBudget, Availability availability,
-                                LocalDate publicationDate, String contactPerson,
-                                CollaborationType collaborationType, ActivityDomain activityDomain,
-                                String expectedBenefits, List<String> requiredSkills,
-                                String collaborationDuration, String address,
-                                ServiceStatus status, LocalDateTime createdAt,
-                                LocalDateTime editAuthorizedUntil, Boolean deleteAuthorized,
-                                Long authorizedByAdminId) {
+    public CollaborationService(Long id, String name, String description, Region region, LocalPartner provider, BigDecimal requestedBudget, Availability availability, LocalDate publicationDate, String contactPerson, CollaborationType collaborationType, ActivityDomain activityDomain, String expectedBenefits, List<String> requiredSkills, String collaborationDuration, String address, ServiceStatus status, List<internationalcompany> favoritedByCompanies, List<EconomicPartner> favoritedByPartners, List<CollaborationServiceDocument> documents, LocalDateTime editAuthorizedUntil, Boolean deleteAuthorized, Long authorizedByAdminId, LocalDateTime createdAt, String rejectionReason, LocalDateTime rejectedAt, Long rejectedByAdminId) {
         this.id = id;
         this.name = name;
         this.description = description;
@@ -159,10 +160,16 @@ public class CollaborationService {
         this.collaborationDuration = collaborationDuration;
         this.address = address;
         this.status = status;
-        this.createdAt = createdAt;
+        this.favoritedByCompanies = favoritedByCompanies;
+        this.favoritedByPartners = favoritedByPartners;
+        this.documents = documents;
         this.editAuthorizedUntil = editAuthorizedUntil;
         this.deleteAuthorized = deleteAuthorized;
         this.authorizedByAdminId = authorizedByAdminId;
+        this.createdAt = createdAt;
+        this.rejectionReason = rejectionReason;
+        this.rejectedAt = rejectedAt;
+        this.rejectedByAdminId = rejectedByAdminId;
     }
 
     @PrePersist
@@ -321,5 +328,29 @@ public class CollaborationService {
 
     public void setFavoritedByPartners(List<EconomicPartner> favoritedByPartners) {
         this.favoritedByPartners = favoritedByPartners;
+    }
+
+    public String getRejectionReason() {
+        return rejectionReason;
+    }
+
+    public void setRejectionReason(String rejectionReason) {
+        this.rejectionReason = rejectionReason;
+    }
+
+    public LocalDateTime getRejectedAt() {
+        return rejectedAt;
+    }
+
+    public void setRejectedAt(LocalDateTime rejectedAt) {
+        this.rejectedAt = rejectedAt;
+    }
+
+    public Long getRejectedByAdminId() {
+        return rejectedByAdminId;
+    }
+
+    public void setRejectedByAdminId(Long rejectedByAdminId) {
+        this.rejectedByAdminId = rejectedByAdminId;
     }
 }

@@ -11,6 +11,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import tn.iset.investplatformpfe.Dto.RejectServiceRequest;
 import tn.iset.investplatformpfe.Entity.InvestmentService;
 import tn.iset.investplatformpfe.Entity.InvestmentServiceDocument;
 import tn.iset.investplatformpfe.Entity.ServiceStatus;
@@ -611,16 +612,27 @@ public class InvestmentServiceController {
     @PutMapping("/{id}/reject")
     public ResponseEntity<?> rejectService(
             @AuthenticationPrincipal Jwt jwt,
-            @PathVariable Long id) {
+            @PathVariable Long id,
+            @RequestBody RejectServiceRequest rejectRequest) {
 
         if (jwt == null || !hasRole(jwt, "ADMIN")) {
             return ResponseEntity.status(403).body(Map.of("error", "Accès réservé aux administrateurs"));
         }
 
         try {
-            InvestmentService rejected = investmentService.rejectInvestmentService(id);
+            // ✅ Récupération de l'email depuis le JWT
+            String adminEmail = jwt.getClaimAsString("email");
+
+            // ✅ Appel du service avec les 3 paramètres
+            InvestmentService rejected = investmentService.rejectInvestmentService(
+                    id,
+                    rejectRequest.getRejectionReason(),
+                    adminEmail
+            );
             return ResponseEntity.ok(rejected);
+
         } catch (Exception e) {
+            log.error("❌ Erreur lors du rejet: {}", e.getMessage());
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }

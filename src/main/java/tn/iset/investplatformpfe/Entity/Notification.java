@@ -22,7 +22,7 @@ public class Notification {
     @Column(nullable = false)
     private String title;
 
-    @Column(nullable = false, length = 1000)
+    @Column(nullable = false, length = 5000)
     private String message;
 
     @Column(name = "created_at", nullable = false)

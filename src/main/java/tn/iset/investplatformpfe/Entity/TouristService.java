@@ -114,6 +114,18 @@ public class TouristService {
     @Column(updatable = false)
     private LocalDateTime createdAt;
 
+    // =========================
+// Rejection fields
+// =========================
+    @Column(name = "rejection_reason", length = 5000)
+    private String rejectionReason;
+
+    @Column(name = "rejected_at")
+    private LocalDateTime rejectedAt;
+
+    @Column(name = "rejected_by_admin_id")
+    private Long rejectedByAdminId;
+
     @PrePersist
     public void prePersist() {
         this.createdAt = LocalDateTime.now();
@@ -344,4 +356,27 @@ public class TouristService {
         return deleteAuthorized != null && deleteAuthorized;
     }
 
+    public String getRejectionReason() {
+        return rejectionReason;
+    }
+
+    public void setRejectionReason(String rejectionReason) {
+        this.rejectionReason = rejectionReason;
+    }
+
+    public LocalDateTime getRejectedAt() {
+        return rejectedAt;
+    }
+
+    public void setRejectedAt(LocalDateTime rejectedAt) {
+        this.rejectedAt = rejectedAt;
+    }
+
+    public Long getRejectedByAdminId() {
+        return rejectedByAdminId;
+    }
+
+    public void setRejectedByAdminId(Long rejectedByAdminId) {
+        this.rejectedByAdminId = rejectedByAdminId;
+    }
 }

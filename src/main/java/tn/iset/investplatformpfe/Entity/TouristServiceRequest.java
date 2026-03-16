@@ -41,6 +41,17 @@ public class TouristServiceRequest {
 
     @Column(name = "execution_date")
     private LocalDateTime executionDate;
+    // ===============================
+// CHAMPS POUR LE REJET (PLUS COMPLETS)
+// ===============================
+    @Column(name = "rejection_reason", length = 1000)
+    private String rejectionReason;  // Raison du rejet (plus spécifique que adminComment)
+
+    @Column(name = "rejected_at")
+    private LocalDateTime rejectedAt;  // Date du rejet
+
+    @Column(name = "rejected_by_admin_id")
+    private Long rejectedByAdminId;  // ID de l'admin qui a rejeté
 
     @ManyToOne
     @JoinColumn(name = "admin_id")
@@ -101,4 +112,28 @@ public class TouristServiceRequest {
 
     public String getAdminComment() { return adminComment; }
     public void setAdminComment(String adminComment) { this.adminComment = adminComment; }
+
+    public String getRejectionReason() {
+        return rejectionReason;
+    }
+
+    public void setRejectionReason(String rejectionReason) {
+        this.rejectionReason = rejectionReason;
+    }
+
+    public LocalDateTime getRejectedAt() {
+        return rejectedAt;
+    }
+
+    public void setRejectedAt(LocalDateTime rejectedAt) {
+        this.rejectedAt = rejectedAt;
+    }
+
+    public Long getRejectedByAdminId() {
+        return rejectedByAdminId;
+    }
+
+    public void setRejectedByAdminId(Long rejectedByAdminId) {
+        this.rejectedByAdminId = rejectedByAdminId;
+    }
 }

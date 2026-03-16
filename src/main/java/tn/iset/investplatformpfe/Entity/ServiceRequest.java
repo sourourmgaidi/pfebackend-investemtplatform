@@ -1,9 +1,6 @@
 package tn.iset.investplatformpfe.Entity;
 
-
 import jakarta.persistence.*;
-
-
 import java.time.LocalDateTime;
 
 @Entity
@@ -41,6 +38,18 @@ public class ServiceRequest {
     @JoinColumn(name = "admin_id")
     private Admin admin;
 
+    // ===============================
+    // CHAMPS POUR LE REJET (NOUVEAU)
+    // ===============================
+    @Column(name = "rejection_reason", length = 1000)
+    private String rejectionReason;
+
+    @Column(name = "rejected_at")
+    private LocalDateTime rejectedAt;
+
+    @Column(name = "rejected_by_admin_id")
+    private Long rejectedByAdminId;
+
     // Constructeurs
     public ServiceRequest() {}
 
@@ -55,7 +64,7 @@ public class ServiceRequest {
         this.requestDate = LocalDateTime.now();
     }
 
-    // Getters et Setters
+    // Getters et Setters existants
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
 
@@ -88,4 +97,31 @@ public class ServiceRequest {
 
     public Admin getAdmin() { return admin; }
     public void setAdmin(Admin admin) { this.admin = admin; }
+
+    // ===============================
+    // NOUVEAUX GETTERS ET SETTERS
+    // ===============================
+    public String getRejectionReason() {
+        return rejectionReason;
+    }
+
+    public void setRejectionReason(String rejectionReason) {
+        this.rejectionReason = rejectionReason;
+    }
+
+    public LocalDateTime getRejectedAt() {
+        return rejectedAt;
+    }
+
+    public void setRejectedAt(LocalDateTime rejectedAt) {
+        this.rejectedAt = rejectedAt;
+    }
+
+    public Long getRejectedByAdminId() {
+        return rejectedByAdminId;
+    }
+
+    public void setRejectedByAdminId(Long rejectedByAdminId) {
+        this.rejectedByAdminId = rejectedByAdminId;
+    }
 }
