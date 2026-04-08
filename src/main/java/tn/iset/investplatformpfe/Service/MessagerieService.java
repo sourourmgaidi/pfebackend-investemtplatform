@@ -1,14 +1,18 @@
 package tn.iset.investplatformpfe.Service;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 import tn.iset.investplatformpfe.Entity.*;
 import tn.iset.investplatformpfe.Repository.*;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -16,14 +20,18 @@ public class MessagerieService {
 
     private final MessageRepository messageRepo;
     private final ConversationRepository conversationRepo;
+    private final MessageAttachmentRepository attachmentRepository;
     private final InvestorRepository investorRepo;
     private final EconomicPartnerRepository partenaireEcoRepo;
     private final LocalPartnerRepository localPartnerRepo;
     private final TouristRepository touristRepo;
     private final InternationalCompanyRepository internationalCompanyRepo;
 
+    @Value("${file.upload-dir.messages:uploads/messages}")
+    private String uploadDir;
     public MessagerieService(MessageRepository messageRepo,
                              ConversationRepository conversationRepo,
+                             MessageAttachmentRepository attachmentRepository,
                              InvestorRepository investorRepo,
                              EconomicPartnerRepository partenaireEcoRepo,
                              LocalPartnerRepository localPartnerRepo,
@@ -31,6 +39,7 @@ public class MessagerieService {
                              InternationalCompanyRepository internationalCompanyRepo) {
         this.messageRepo = messageRepo;
         this.conversationRepo = conversationRepo;
+        this.attachmentRepository = attachmentRepository;
         this.investorRepo = investorRepo;
         this.partenaireEcoRepo = partenaireEcoRepo;
         this.localPartnerRepo = localPartnerRepo;
@@ -38,10 +47,347 @@ public class MessagerieService {
         this.internationalCompanyRepo = internationalCompanyRepo;
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // RECHERCHE
-    // ─────────────────────────────────────────────────────────────────────────
+    // ========================================
+    // ENVOYER UN MESSAGE SIMPLE (SANS PIÈCES JOINTES)
+    // ========================================
+    @Transactional
+    public Message sendMessage(String senderEmail, String recipientEmail,
+                               String content, String senderRole) {
 
+        // 1. Trouver ou créer la conversation
+        Conversation conversation = findOrCreateConversation(senderEmail, recipientEmail, senderRole);
+
+        // Forcer la sauvegarde si nouvellement créée
+        if (conversation.getId() == null) {
+            conversation = conversationRepo.saveAndFlush(conversation);
+        }
+
+        // 2. Créer le message
+        Message message = new Message();
+        message.setContent(content);
+        message.setSenderEmail(senderEmail);
+        message.setRecipientEmail(recipientEmail);
+        message.setSentDate(LocalDateTime.now());
+        message.setRead(false);
+        message.setConversation(conversation);
+
+        // 3. Sauvegarder le message
+        Message savedMessage = messageRepo.save(message);
+
+        // 4. Mettre à jour la conversation
+        updateConversationMetadata(conversation, content, senderEmail);
+
+        return savedMessage;
+    }
+
+    // ========================================
+    // ENVOYER UN MESSAGE AVEC PIÈCES JOINTES
+    // ========================================
+    @Transactional
+    public Message sendMessageWithAttachments(String senderEmail, String recipientEmail,
+                                              String content, String senderRole,
+                                              MultipartFile[] attachments) throws IOException {
+
+        // 1. Trouver ou créer la conversation
+        Conversation conversation = findOrCreateConversation(senderEmail, recipientEmail, senderRole);
+
+        // Forcer la sauvegarde si nouvellement créée
+        if (conversation.getId() == null) {
+            conversation = conversationRepo.saveAndFlush(conversation);
+        }
+
+        // 2. Créer le message
+        Message message = new Message();
+        message.setContent(content);
+        message.setSenderEmail(senderEmail);
+        message.setRecipientEmail(recipientEmail);
+        message.setSentDate(LocalDateTime.now());
+        message.setRead(false);
+        message.setConversation(conversation);
+
+        // 3. Sauvegarder le message d'abord
+        Message savedMessage = messageRepo.save(message);
+        System.out.println("✅ Message sauvegardé avec ID: " + savedMessage.getId());
+
+        // 4. Traiter les attachments
+        if (attachments != null && attachments.length > 0) {
+            System.out.println("📦 Traitement de " + attachments.length + " fichier(s)");
+
+            for (MultipartFile file : attachments) {
+                if (file != null && !file.isEmpty()) {
+                    // Sauvegarder le fichier et créer l'attachment
+                    MessageAttachment attachment = saveAttachment(file);
+
+                    // Lier l'attachment au message
+                    savedMessage.addAttachment(attachment);
+
+                    // Sauvegarder l'attachment
+                    attachmentRepository.save(attachment);
+                }
+            }
+
+            System.out.println("✅ " + attachments.length + " fichier(s) attaché(s)");
+
+            // Sauvegarder le message avec les attachments
+            savedMessage = messageRepo.save(savedMessage);
+        }
+
+        // 5. Mettre à jour la conversation avec un aperçu du message
+        String messagePreview = buildMessagePreview(content, attachments);
+        updateConversationMetadata(conversation, messagePreview, senderEmail);
+
+        return savedMessage;
+    }
+
+    // ========================================
+    // SAUVEGARDER UN FICHIER (MÉTHODE PRIVÉE)
+    // ========================================
+    private MessageAttachment saveAttachment(MultipartFile file) throws IOException {
+        // Créer le dossier si nécessaire
+        Path uploadPath = Paths.get(uploadDir);
+        if (!Files.exists(uploadPath)) {
+            Files.createDirectories(uploadPath);
+            System.out.println("📁 Dossier créé: " + uploadPath.toAbsolutePath());
+        }
+
+        // Générer un nom de fichier unique
+        String originalFileName = file.getOriginalFilename();
+        String fileExtension = "";
+        if (originalFileName != null && originalFileName.contains(".")) {
+            fileExtension = originalFileName.substring(originalFileName.lastIndexOf("."));
+        }
+        String uniqueFileName = UUID.randomUUID().toString() + fileExtension;
+        Path filePath = uploadPath.resolve(uniqueFileName);
+
+        // Sauvegarder le fichier
+        Files.copy(file.getInputStream(), filePath);
+        System.out.println("💾 Fichier sauvegardé: " + filePath.toAbsolutePath());
+
+        // Créer et retourner l'attachment
+        return MessageAttachment.builder()
+                .fileName(originalFileName)
+                .fileType(file.getContentType())
+                .fileSize(file.getSize())
+                .filePath(filePath.toString())
+                .uploadedAt(LocalDateTime.now())
+                .build();
+    }
+
+    // ========================================
+    // CONSTRUIRE L'APERÇU DU MESSAGE POUR LA CONVERSATION
+    // ========================================
+    private String buildMessagePreview(String content, MultipartFile[] attachments) {
+        StringBuilder preview = new StringBuilder();
+
+        if (content != null && !content.trim().isEmpty()) {
+            String truncatedContent = content.length() > 50 ?
+                    content.substring(0, 50) + "..." : content;
+            preview.append(truncatedContent);
+        }
+
+        if (attachments != null && attachments.length > 0) {
+            if (preview.length() > 0) {
+                preview.append(" ");
+            }
+            preview.append("📎 ");
+            if (attachments.length == 1) {
+                preview.append("1 pièce jointe");
+            } else {
+                preview.append(attachments.length).append(" pièces jointes");
+            }
+        }
+
+        return preview.toString();
+    }
+
+    // ========================================
+    // RÉCUPÉRER UN MESSAGE AVEC SES PIÈCES JOINTES
+    // ========================================
+    @Transactional(readOnly = true)
+    public Message getMessageWithAttachments(Long messageId) {
+        return messageRepo.findById(messageId)
+                .orElseThrow(() -> new RuntimeException("Message non trouvé avec l'ID: " + messageId));
+    }
+
+    // ========================================
+    // RÉCUPÉRER UNE PIÈCE JOINTE PAR SON ID
+    // ========================================
+    @Transactional(readOnly = true)
+    public MessageAttachment getAttachment(Long attachmentId) {
+        return attachmentRepository.findById(attachmentId)
+                .orElseThrow(() -> new RuntimeException("Pièce jointe non trouvée avec l'ID: " + attachmentId));
+    }
+
+    // ========================================
+    // RÉCUPÉRER TOUTES LES PIÈCES JOINTES D'UN MESSAGE
+    // ========================================
+    @Transactional(readOnly = true)
+    public List<MessageAttachment> getAttachmentsByMessageId(Long messageId) {
+        return attachmentRepository.findByMessageId(messageId);
+    }
+
+    // ========================================
+    // SUPPRIMER UNE PIÈCE JOINTE (AVEC LE FICHIER PHYSIQUE)
+    // ========================================
+    @Transactional
+    public void deleteAttachment(Long attachmentId) {
+        MessageAttachment attachment = attachmentRepository.findById(attachmentId)
+                .orElseThrow(() -> new RuntimeException("Pièce jointe non trouvée"));
+
+        try {
+            // Supprimer le fichier physique
+            Path filePath = Paths.get(attachment.getFilePath());
+            Files.deleteIfExists(filePath);
+            System.out.println("🗑️ Fichier supprimé: " + filePath);
+        } catch (IOException e) {
+            System.err.println("⚠️ Erreur lors de la suppression du fichier: " + e.getMessage());
+        }
+
+        // Supprimer l'entrée en base de données
+        attachmentRepository.delete(attachment);
+        System.out.println("✅ Pièce jointe supprimée de la base de données");
+    }
+
+    // ========================================
+    // SUPPRIMER TOUTES LES PIÈCES JOINTES D'UN MESSAGE
+    // ========================================
+    @Transactional
+    public void deleteAllAttachments(Long messageId) {
+        List<MessageAttachment> attachments = attachmentRepository.findByMessageId(messageId);
+
+        for (MessageAttachment attachment : attachments) {
+            try {
+                // Supprimer le fichier physique
+                Path filePath = Paths.get(attachment.getFilePath());
+                Files.deleteIfExists(filePath);
+            } catch (IOException e) {
+                System.err.println("⚠️ Erreur lors de la suppression du fichier: " + e.getMessage());
+            }
+        }
+
+        // Supprimer toutes les entrées en base de données
+        attachmentRepository.deleteAll(attachments);
+        System.out.println("✅ " + attachments.size() + " pièce(s) jointe(s) supprimée(s)");
+    }
+
+    // ========================================
+    // TROUVER OU CRÉER UNE CONVERSATION
+    // ========================================
+    private Conversation findOrCreateConversation(String senderEmail, String recipientEmail, String senderRole) {
+
+        // Chercher si une conversation existe déjà (dans les deux sens)
+        Conversation conversation = conversationRepo
+                .findBySenderEmailAndRecipientEmail(senderEmail, recipientEmail)
+                .orElseGet(() -> conversationRepo
+                        .findBySenderEmailAndRecipientEmail(recipientEmail, senderEmail)
+                        .orElse(null));
+
+        // Si pas de conversation, en créer une nouvelle
+        if (conversation == null) {
+            String recipientRole = determineRecipientRole(recipientEmail);
+            conversation = new Conversation(senderRole, senderEmail, recipientEmail, recipientRole);
+
+            // Sauvegarder immédiatement
+            conversation = conversationRepo.save(conversation);
+        }
+
+        return conversation;
+    }
+
+    // ========================================
+    // METTRE À JOUR LES MÉTADONNÉES DE LA CONVERSATION
+    // ========================================
+    private void updateConversationMetadata(Conversation conversation, String content, String senderEmail) {
+        conversation.setLastMessage(content);
+        conversation.setLastMessageDate(LocalDateTime.now());
+
+        if (conversation.getSenderEmail().equals(senderEmail)) {
+            conversation.setSenderViewed(true);
+            conversation.setPartnerViewed(false);
+        } else {
+            conversation.setSenderViewed(false);
+            conversation.setPartnerViewed(true);
+        }
+
+        conversationRepo.save(conversation);
+    }
+
+    // ========================================
+    // RÉCUPÉRER UNE CONVERSATION COMPLÈTE AVEC PIÈCES JOINTES
+    // ========================================
+    @Transactional
+    public List<Message> getConversation(String myEmail, String otherEmail) {
+
+        Conversation conversation = conversationRepo
+                .findBySenderEmailAndRecipientEmail(myEmail, otherEmail)
+                .orElseGet(() -> conversationRepo
+                        .findBySenderEmailAndRecipientEmail(otherEmail, myEmail)
+                        .orElseThrow(() -> new RuntimeException("Conversation not found")));
+
+        // Marquer les messages comme lus
+        if (conversation.getSenderEmail().equals(myEmail)) {
+            messageRepo.markMessagesAsRead(myEmail, conversation);
+            conversation.setSenderViewed(true);
+        } else {
+            messageRepo.markMessagesAsRead(myEmail, conversation);
+            conversation.setPartnerViewed(true);
+        }
+
+        conversationRepo.save(conversation);
+
+        // Récupérer tous les messages de la conversation
+        List<Message> messages = messageRepo.findByConversationOrderBySentDateAsc(conversation);
+
+        // Les attachments sont chargés automatiquement grâce à FetchType.EAGER
+        return messages;
+    }
+
+    // ========================================
+    // RÉCUPÉRER TOUTES LES CONVERSATIONS D'UN UTILISATEUR
+    // ========================================
+    public List<Conversation> getAllConversations(String email) {
+        List<Conversation> conversations = conversationRepo.findAllByParticipantEmail(email);
+
+        // Ajouter le nombre de pièces jointes non lues ou d'autres métadonnées si nécessaire
+        for (Conversation conv : conversations) {
+            // Vous pouvez ajouter ici des métadonnées supplémentaires
+            long unreadCount = messageRepo.countUnreadByRecipient(email);
+            // conv.setUnreadCount(unreadCount); // À ajouter si nécessaire dans l'entité
+        }
+
+        return conversations;
+    }
+
+    public List<Conversation> getSenderConversations(String email) {
+        return conversationRepo.findAllByParticipantEmail(email);
+    }
+
+    public List<Conversation> getPartnerConversations(String email) {
+        return conversationRepo.findAllByParticipantEmail(email);
+    }
+
+    // ========================================
+    // MESSAGES NON LUS
+    // ========================================
+    public long countUnreadMessages(String email) {
+        return messageRepo.countUnreadByRecipient(email);
+    }
+
+    public List<Message> getUnreadMessages(String email) {
+        return messageRepo.findByRecipientEmailAndReadFalse(email);
+    }
+
+    // ========================================
+    // VÉRIFIER SI UNE CONVERSATION EXISTE
+    // ========================================
+    public boolean conversationExists(String senderEmail, String recipientEmail) {
+        return conversationRepo.findBySenderEmailAndRecipientEmail(senderEmail, recipientEmail).isPresent()
+                || conversationRepo.findBySenderEmailAndRecipientEmail(recipientEmail, senderEmail).isPresent();
+    }
+
+    // ========================================
+    // RECHERCHE
+    // ========================================
     public List<Map<String, Object>> searchLocalPartners(String search) {
         return localPartnerRepo.searchPartners(search).stream()
                 .map(p -> {
@@ -60,129 +406,80 @@ public class MessagerieService {
         return conversationRepo.searchSenderConversations(email, search);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // ENVOYER UN MESSAGE (universel - fonctionne pour tous les rôles)
-    // ─────────────────────────────────────────────────────────────────────────
-
-    @Transactional
-    public Message sendMessage(String senderEmail, String recipientEmail,
-                               String content, String senderRole) {
-
-        // Chercher la conversation existante dans les deux sens
-        Conversation conversation = conversationRepo
-                .findBySenderEmailAndRecipientEmail(senderEmail, recipientEmail)
-                .orElseGet(() -> conversationRepo
-                        .findBySenderEmailAndRecipientEmail(recipientEmail, senderEmail)
-                        .orElseGet(() -> {
-                            // Créer une nouvelle conversation
-                            String recipientRole = determineRecipientRole(recipientEmail);
-                            Conversation nouvelle = new Conversation(
-                                    senderRole, senderEmail, recipientEmail, recipientRole
-                            );
-                            return conversationRepo.save(nouvelle);
-                        }));
-
-        // Créer et sauvegarder le message
-        Message message = new Message(content, senderEmail, recipientEmail, conversation);
-        message = messageRepo.save(message);
-
-        // Mettre à jour la conversation
-        conversation.setLastMessage(content);
-        conversation.setLastMessageDate(LocalDateTime.now());
-
-        // Marquer comme lu pour l'expéditeur, non lu pour le destinataire
-        if (conversation.getSenderEmail().equals(senderEmail)) {
-            conversation.setSenderViewed(true);
-            conversation.setPartnerViewed(false);
-        } else {
-            conversation.setSenderViewed(false);
-            conversation.setPartnerViewed(true);
-        }
-
-        conversationRepo.save(conversation);
-        return message;
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // RÉCUPÉRER UNE CONVERSATION COMPLÈTE
-    // ─────────────────────────────────────────────────────────────────────────
-
-    @Transactional
-    public List<Message> getConversation(String myEmail, String otherEmail) {
-
-        // Chercher la conversation dans les deux sens
-        Conversation conversation = conversationRepo
-                .findBySenderEmailAndRecipientEmail(myEmail, otherEmail)
-                .orElseGet(() -> conversationRepo
-                        .findBySenderEmailAndRecipientEmail(otherEmail, myEmail)
-                        .orElseThrow(() -> new RuntimeException("Conversation not found")));
-
-        // Marquer comme lu selon qui consulte
-        if (conversation.getSenderEmail().equals(myEmail)) {
-            messageRepo.markMessagesAsRead(myEmail, conversation);
-            conversation.setSenderViewed(true);
-        } else {
-            messageRepo.markMessagesAsRead(myEmail, conversation);
-            conversation.setPartnerViewed(true);
-        }
-
-        conversationRepo.save(conversation);
-        return messageRepo.findByConversationOrderBySentDateAsc(conversation);
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // RÉCUPÉRER TOUTES LES CONVERSATIONS D'UN UTILISATEUR
-    // ─────────────────────────────────────────────────────────────────────────
-
-    public List<Conversation> getAllConversations(String email) {
-        // Retourne toutes les convs où l'utilisateur est sender OU recipient
-        return conversationRepo.findAllByParticipantEmail(email);
-    }
-
-    // Compatibilité avec l'ancien code frontend
-    public List<Conversation> getSenderConversations(String email) {
-        return conversationRepo.findAllByParticipantEmail(email);
-    }
-
-    // Compatibilité pour le partenaire local
-    public List<Conversation> getPartnerConversations(String email) {
-        return conversationRepo.findAllByParticipantEmail(email);
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // MESSAGES NON LUS
-    // ─────────────────────────────────────────────────────────────────────────
-
-    public long countUnreadMessages(String email) {
-        return messageRepo.countUnreadByRecipient(email);
-    }
-
-    public List<Message> getUnreadMessages(String email) {
-        return messageRepo.findByRecipientEmailAndReadFalse(email);
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // VÉRIFIER SI UNE CONVERSATION EXISTE
-    // ─────────────────────────────────────────────────────────────────────────
-
-    public boolean conversationExists(String senderEmail, String recipientEmail) {
-        return conversationRepo.findBySenderEmailAndRecipientEmail(senderEmail, recipientEmail).isPresent()
-                || conversationRepo.findBySenderEmailAndRecipientEmail(recipientEmail, senderEmail).isPresent();
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
+    // ========================================
     // UTILITAIRE : Déterminer le rôle du destinataire
-    // ─────────────────────────────────────────────────────────────────────────
-
-
-    // InternationalCompanyRepository internationalCompanyRepo
-
+    // ========================================
     private String determineRecipientRole(String email) {
         if (localPartnerRepo.findByEmail(email).isPresent()) return "LOCAL_PARTNER";
         if (investorRepo.findByEmail(email).isPresent()) return "INVESTOR";
         if (partenaireEcoRepo.findByEmail(email).isPresent()) return "PARTNER";
         if (touristRepo.findByEmail(email).isPresent()) return "TOURIST";
-        if (internationalCompanyRepo.findByEmail(email).isPresent()) return "INTERNATIONAL_COMPANY"; // ✅ AJOUT
+        if (internationalCompanyRepo.findByEmail(email).isPresent()) return "INTERNATIONAL_COMPANY";
+        return "UNKNOWN";
+    }
+
+    // ========================================
+    // MÉTHODES UTILITAIRES SUPPLÉMENTAIRES
+    // ========================================
+
+    /**
+     * Vérifier si un message a des pièces jointes
+     */
+    public boolean hasAttachments(Long messageId) {
+        Message message = messageRepo.findById(messageId).orElse(null);
+        return message != null && message.getAttachments() != null && !message.getAttachments().isEmpty();
+    }
+
+    /**
+     * Compter le nombre total de pièces jointes pour un utilisateur
+     */
+    public long countTotalAttachmentsForUser(String email) {
+        // Cette méthode nécessiterait une requête personnalisée
+        // Pour l'instant, retourne 0
+        return 0;
+    }
+
+    /**
+     * Nettoyer les fichiers orphelins (pièces jointes sans message associé)
+     * À appeler périodiquement (ex: tâche planifiée)
+     */
+    @Transactional
+    public void cleanupOrphanedAttachments() {
+        List<MessageAttachment> allAttachments = attachmentRepository.findAll();
+        int deletedCount = 0;
+
+        for (MessageAttachment attachment : allAttachments) {
+            if (attachment.getMessage() == null) {
+                try {
+                    // Supprimer le fichier physique
+                    Path filePath = Paths.get(attachment.getFilePath());
+                    Files.deleteIfExists(filePath);
+
+                    // Supprimer l'entrée en base
+                    attachmentRepository.delete(attachment);
+                    deletedCount++;
+
+                    System.out.println("🗑️ Attachment orphelin supprimé: " + attachment.getFileName());
+                } catch (IOException e) {
+                    System.err.println("⚠️ Erreur lors de la suppression du fichier orphelin: " + e.getMessage());
+                }
+            }
+        }
+
+        if (deletedCount > 0) {
+            System.out.println("✅ Nettoyage terminé: " + deletedCount + " fichier(s) orphelin(s) supprimé(s)");
+        }
+    }
+
+    // ========================================
+// RÉCUPÉRER LE RÔLE D'UN UTILISATEUR PAR EMAIL
+// ========================================
+    public String getUserRole(String email) {
+        if (localPartnerRepo.findByEmail(email).isPresent()) return "LOCAL_PARTNER";
+        if (investorRepo.findByEmail(email).isPresent()) return "INVESTOR";
+        if (partenaireEcoRepo.findByEmail(email).isPresent()) return "PARTNER";
+        if (touristRepo.findByEmail(email).isPresent()) return "TOURIST";
+        if (internationalCompanyRepo.findByEmail(email).isPresent()) return "INTERNATIONAL_COMPANY";
         return "UNKNOWN";
     }
 }

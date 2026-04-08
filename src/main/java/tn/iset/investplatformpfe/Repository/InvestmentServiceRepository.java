@@ -18,6 +18,9 @@ public interface InvestmentServiceRepository extends JpaRepository<InvestmentSer
 
     // ✅ Par fournisseur (provider)
     List<InvestmentService> findByProviderId(Long providerId);
+    long countByStatus(ServiceStatus status);
+    long countByRegionIdAndStatus(Long regionId, ServiceStatus status);
+    List<InvestmentService> findByRegionIdAndStatus(Long regionId, ServiceStatus status);
 
     // ✅ Par région
     List<InvestmentService> findByRegionId(Long regionId);
@@ -52,4 +55,14 @@ public interface InvestmentServiceRepository extends JpaRepository<InvestmentSer
     );
     @Query("SELECT s FROM InvestmentService s WHERE s.editAuthorizedUntil < :now")
     List<InvestmentService> findByEditAuthorizedUntilBefore(@Param("now") LocalDateTime now);
+
+
+    // ✅ NOUVELLE MÉTHODE POUR RÉCUPÉRER LES SERVICES AVEC PLUSIEURS STATUTS
+    @Query("SELECT i FROM InvestmentService i WHERE i.region.id = :regionId AND i.status IN :statuses")
+    List<InvestmentService> findByRegionIdAndStatusIn(@Param("regionId") Long regionId, @Param("statuses") List<ServiceStatus> statuses);
+
+    // ✅ NOUVELLE MÉTHODE POUR COMPTER AVEC PLUSIEURS STATUTS
+    @Query("SELECT COUNT(i) FROM InvestmentService i WHERE i.region.id = :regionId AND i.status IN :statuses")
+    long countByRegionIdAndStatusIn(@Param("regionId") Long regionId, @Param("statuses") List<ServiceStatus> statuses);
+
 }

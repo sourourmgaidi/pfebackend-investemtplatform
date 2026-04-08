@@ -5,6 +5,8 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 import tn.iset.investplatformpfe.Service.LocalPartnerAuthService;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -48,12 +50,55 @@ public class LocalPartnerAuthController {
 
         try {
             Map<String, Object> response = authService.login(email, password);
+
+            // ✅ DÉMARRER LA SESSION APRÈS LOGIN
+            String accessToken = (String) response.get("access_token");
+            if (accessToken != null) {
+                String role = extractRoleFromJwt(accessToken);
+                authService.startSessionAfterLogin(email, role);
+            }
+
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             return ResponseEntity.status(401).body(Map.of("error", "Authentication failed: " + e.getMessage()));
         }
     }
+    private String extractRoleFromJwt(String token) {
+        try {
+            String[] parts = token.split("\\.");
+            if (parts.length < 2) return "USER";
 
+            String payload = new String(Base64.getUrlDecoder().decode(parts[1]), StandardCharsets.UTF_8);
+
+            int realmAccessIndex = payload.indexOf("\"realm_access\"");
+            if (realmAccessIndex == -1) return "USER";
+
+            int rolesIndex = payload.indexOf("\"roles\"", realmAccessIndex);
+            if (rolesIndex == -1) return "USER";
+
+            int startBracket = payload.indexOf("[", rolesIndex);
+            int endBracket = payload.indexOf("]", startBracket);
+
+            if (startBracket == -1 || endBracket == -1) return "USER";
+
+            String rolesSection = payload.substring(startBracket + 1, endBracket);
+            String[] roleMatches = rolesSection.split(",");
+
+            for (String roleMatch : roleMatches) {
+                String cleanRole = roleMatch.trim().replaceAll("\"", "");
+                if (!cleanRole.startsWith("default-roles-") &&
+                        !cleanRole.equals("offline_access") &&
+                        !cleanRole.equals("uma_authorization")) {
+                    return cleanRole;
+                }
+            }
+
+            return "USER";
+        } catch (Exception e) {
+            System.err.println("Erreur extraction rôle: " + e.getMessage());
+            return "USER";
+        }
+    }
     @PostMapping("/refresh")
     public ResponseEntity<?> refresh(@RequestBody Map<String, String> request) {
         String refreshToken = request.get("refreshToken");
@@ -71,21 +116,41 @@ public class LocalPartnerAuthController {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<?> logout(@RequestBody Map<String, String> request) {
+    public ResponseEntity<?> logout(@AuthenticationPrincipal Jwt jwt,
+                                    @RequestBody Map<String, String> request) {
         String refreshToken = request.get("refreshToken");
 
         if (refreshToken == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "Refresh token is required"));
         }
 
+        // 1. Email depuis le JWT
+        String email = null;
+        if (jwt != null) {
+            email = jwt.getClaimAsString("email");
+        }
+
+        // 2. Fallback : email depuis le body
+        if (email == null) {
+            email = request.get("email");
+        }
+
         try {
             authService.logout(refreshToken);
+
+            // ✅ TERMINER LA SESSION
+            if (email != null) {
+                authService.endSession(email);
+                System.out.println("✅ Session terminée pour " + email);
+            } else {
+                System.out.println("⚠️ Email introuvable, session non terminée");
+            }
+
             return ResponseEntity.ok(Map.of("message", "Logout successful"));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", "Logout failed: " + e.getMessage()));
         }
     }
-
     @GetMapping("/profile")
     public ResponseEntity<?> getProfile(@AuthenticationPrincipal Jwt jwt) {
         if (jwt == null) {

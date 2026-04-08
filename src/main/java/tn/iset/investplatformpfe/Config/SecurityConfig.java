@@ -1,5 +1,6 @@
 package tn.iset.investplatformpfe.Config;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
@@ -10,11 +11,15 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import tn.iset.investplatformpfe.Security.TokenExpirationFilter;
+import tn.iset.investplatformpfe.Service.UserSessionService;
 
 import java.util.Arrays;
 import java.util.Collection;
@@ -26,7 +31,11 @@ import java.util.stream.Collectors;
 @EnableWebSecurity
 @EnableMethodSecurity(prePostEnabled = true)
 public class SecurityConfig {
+    @Autowired
+    private JwtDecoder jwtDecoder;
 
+    @Autowired
+    private UserSessionService userSessionService;
     // ========================================
     // 1. FILTRE POUR LES RESSOURCES STATIQUES (UPLOADS) - AVEC CORS
     // ========================================
@@ -51,6 +60,17 @@ public class SecurityConfig {
     public SecurityFilterChain publicAuthFilterChain(HttpSecurity http) throws Exception {
         http
                 .securityMatcher(
+                        "/api/acquisitions/confirm",
+                        "/api/investment-services/by-status/**",
+                        "/api/collaboration-services/by-status/**",
+                        "/api/acquisitions/cancel",
+                        "/api/acquisitions/check",
+                        "/api/acquisitions/access/user",
+                        "/api/acquisitions/access/partner",
+                        "/api/currency/**",
+                        "/api/stats/summary",
+                        "/api/stats/regions",
+                        "/api/sessions/end-by-email",
                         "/api/auth/register",
                         "/api/auth/login",
                         "/api/auth/refresh",
@@ -109,6 +129,12 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .authorizeHttpRequests(authz -> authz
                         // L'upload nécessite une authentification
+                        // ✅ AJOUT — ces 5 lignes manquaient complètement
+                        .requestMatchers("/api/sessions/my-stats").authenticated()
+                        .requestMatchers("/api/sessions/start").authenticated()
+                        .requestMatchers("/api/sessions/end").authenticated()
+                        .requestMatchers("/api/sessions/user/**").hasRole("ADMIN")
+                        .requestMatchers("/api/sessions/all-users").hasRole("ADMIN")
                         .requestMatchers("/api/upload/**").authenticated()
 
                         // Les profils nécessitent une authentification
@@ -132,6 +158,7 @@ public class SecurityConfig {
 
                         // ✅ NOUVEAUX ENDPOINTS POUR L'ADMIN DANS /api/admin
                         .requestMatchers("/api/admin/delete-user/**").hasRole("ADMIN")
+                        .requestMatchers("/api/stats/daily").hasRole("ADMIN")
 
                         // Tout le reste dans /api nécessite une authentification
                         .anyRequest().authenticated()
@@ -141,6 +168,7 @@ public class SecurityConfig {
                                 .jwtAuthenticationConverter(jwtAuthenticationConverter())
                         )
                 );
+        http.addFilterBefore(new TokenExpirationFilter(jwtDecoder, userSessionService), UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
 

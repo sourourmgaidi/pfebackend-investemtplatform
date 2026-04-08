@@ -11,11 +11,10 @@ import org.springframework.web.client.RestTemplate;
 import tn.iset.investplatformpfe.Entity.Role;
 import tn.iset.investplatformpfe.Repository.InvestorRepository;
 import tn.iset.investplatformpfe.Service.AuthService;
+import tn.iset.investplatformpfe.Service.UserSessionService;
 
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -24,6 +23,7 @@ public class AuthController {
     private final AuthService authService;
     private final InvestorRepository investorRepository;
     private final RestTemplate restTemplate;
+    private final UserSessionService sessionService;
 
     @Value("${keycloak.auth-server-url}")
     private String authServerUrl;
@@ -37,9 +37,11 @@ public class AuthController {
     @Value("${keycloak.admin-password:admin}")
     private String adminPassword;
 
-    public AuthController(AuthService authService, InvestorRepository investorRepository) {
+
+    public AuthController(AuthService authService, InvestorRepository investorRepository, UserSessionService sessionService) {
         this.authService = authService;
         this.investorRepository = investorRepository;
+        this.sessionService = sessionService;
         this.restTemplate = new RestTemplate();
     }
 
@@ -106,12 +108,69 @@ public class AuthController {
 
         try {
             Map<String, Object> response = authService.login(email, password);
+
+            // ✅ RÉCUPÉRER LE JWT ET EXTRAIRE LE RÔLE
+            String accessToken = (String) response.get("access_token");
+            if (accessToken != null) {
+                String role = extractRoleFromJwt(accessToken);
+                authService.startSessionAfterLogin(email, role);
+            }
+
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             return ResponseEntity.status(401).body(Map.of("error", "Authentification échouée: " + e.getMessage()));
         }
     }
 
+    // ✅ MÉTHODE CORRIGÉE SANS JACKSON
+    private String extractRoleFromJwt(String token) {
+        try {
+            // Séparer les parties du JWT
+            String[] parts = token.split("\\.");
+            if (parts.length < 2) {
+                return "USER";
+            }
+
+            // Décoder le payload (partie 2)
+            String payload = new String(Base64.getUrlDecoder().decode(parts[1]), StandardCharsets.UTF_8);
+
+            // Chercher "realm_access" dans le JSON
+            int realmAccessIndex = payload.indexOf("\"realm_access\"");
+            if (realmAccessIndex == -1) return "USER";
+
+            // Chercher "roles"
+            int rolesIndex = payload.indexOf("\"roles\"", realmAccessIndex);
+            if (rolesIndex == -1) return "USER";
+
+            // Chercher le tableau des rôles
+            int startBracket = payload.indexOf("[", rolesIndex);
+            int endBracket = payload.indexOf("]", startBracket);
+
+            if (startBracket == -1 || endBracket == -1) return "USER";
+
+            String rolesSection = payload.substring(startBracket + 1, endBracket);
+
+            // Extraire les rôles
+            String[] roleMatches = rolesSection.split(",");
+
+            for (String roleMatch : roleMatches) {
+                String cleanRole = roleMatch.trim().replaceAll("\"", "");
+
+                // Filtrer les rôles système Keycloak
+                if (!cleanRole.startsWith("default-roles-") &&
+                        !cleanRole.equals("offline_access") &&
+                        !cleanRole.equals("uma_authorization")) {
+                    return cleanRole;
+                }
+            }
+
+            return "USER";
+
+        } catch (Exception e) {
+            System.err.println("Erreur extraction rôle: " + e.getMessage());
+            return "USER";
+        }
+    }
     // ========================================
     // PROFIL UTILISATEUR CONNECTÉ
     // ========================================
@@ -185,22 +244,86 @@ public class AuthController {
     // DÉCONNEXION
     // ========================================
     @PostMapping("/logout")
-    public ResponseEntity<?> logout(@RequestBody Map<String, String> request) {
+    public ResponseEntity<?> logout(@AuthenticationPrincipal Jwt jwt,
+                                    @RequestBody Map<String, String> request) {
         String refreshToken = request.get("refreshToken");
 
         if (refreshToken == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "Refresh token requis"));
         }
 
+        // 1. Email depuis le JWT header (Authorization: Bearer ...)
+        String email = null;
+        if (jwt != null) {
+            email = jwt.getClaimAsString("email");
+            System.out.println("📧 Email depuis JWT: " + email);
+        }
+
+        // 2. Fallback : email depuis le body
+        if (email == null) {
+            email = request.get("email");
+            if (email != null) System.out.println("📧 Email depuis body: " + email);
+        }
+
+        // 3. ✅ NOUVEAU : extraire le sub du refreshToken → appel Keycloak → email
+        if (email == null) {
+            String sub = extractSubFromToken(refreshToken);
+            System.out.println("🔑 sub extrait du refreshToken: " + sub);
+            if (sub != null) {
+                email = authService.findEmailByKeycloakSub(sub);
+                System.out.println("📧 Email trouvé via Keycloak: " + email);
+            }
+        }
+
         try {
+            // Déconnexion Keycloak
             authService.logout(refreshToken);
+
+            // Terminer la session locale
+            if (email != null) {
+                authService.endSession(email);
+                System.out.println("✅ Session terminée pour " + email);
+            } else {
+                System.out.println("⚠️ Email introuvable, session non terminée");
+            }
+
             return ResponseEntity.ok(Map.of("message", "Déconnexion réussie"));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Déconnexion échouée: " + e.getMessage()));
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Déconnexion échouée: " + e.getMessage()));
         }
     }
+    private String extractSubFromToken(String token) {
+        try {
+            String[] parts = token.split("\\.");
+            if (parts.length < 2) return null;
 
-    // ========================================
+            String payload = parts[1];
+            int mod = payload.length() % 4;
+            if (mod != 0) payload += "=".repeat(4 - mod);
+
+            String decoded = new String(
+                    Base64.getUrlDecoder().decode(payload),
+                    StandardCharsets.UTF_8
+            );
+            System.out.println("🔍 Payload refreshToken décodé: " + decoded);
+
+            // Extraire "sub"
+            if (decoded.contains("\"sub\"")) {
+                int idx    = decoded.indexOf("\"sub\"");
+                int colon  = decoded.indexOf(":", idx);
+                int startQ = decoded.indexOf("\"", colon);
+                int endQ   = decoded.indexOf("\"", startQ + 1);
+                if (startQ != -1 && endQ != -1) {
+                    return decoded.substring(startQ + 1, endQ);
+                }
+            }
+            return null;
+        } catch (Exception e) {
+            System.err.println("⚠️ Erreur extraction sub: " + e.getMessage());
+            return null;
+        }
+    }
     // MOT DE PASSE OUBLIÉ
     // ========================================
     @PostMapping("/forgot-password")

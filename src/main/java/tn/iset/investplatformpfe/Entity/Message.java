@@ -3,6 +3,8 @@ package tn.iset.investplatformpfe.Entity;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "message")
@@ -21,7 +23,6 @@ public class Message {
     @Column(name = "recipient_email", nullable = false)
     private String recipientEmail;
 
-    // ✅ Toujours stocker la date d'envoi
     @Column(name = "sent_date", nullable = false)
     private LocalDateTime sentDate;
 
@@ -33,17 +34,28 @@ public class Message {
     @JsonIgnore
     private Conversation conversation;
 
+    // ✅ Ajout des attachments
+    @OneToMany(mappedBy = "message", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @OrderBy("uploadedAt ASC")
+    private List<MessageAttachment> attachments = new ArrayList<>();
+
     // Constructeur vide requis par JPA
     public Message() {}
 
-    // ✅ Constructeur utilisé dans MessagerieService.sendMessage()
+    // Constructeur utilisé dans MessagerieService.sendMessage()
     public Message(String content, String senderEmail, String recipientEmail, Conversation conversation) {
         this.content = content;
         this.senderEmail = senderEmail;
         this.recipientEmail = recipientEmail;
         this.conversation = conversation;
-        this.sentDate = LocalDateTime.now(); // ✅ Date définie à la création
+        this.sentDate = LocalDateTime.now();
         this.read = false;
+    }
+
+    // Méthode utilitaire pour ajouter un attachment
+    public void addAttachment(MessageAttachment attachment) {
+        attachments.add(attachment);
+        attachment.setMessage(this);
     }
 
     // Getters & Setters
@@ -67,4 +79,7 @@ public class Message {
 
     public Conversation getConversation() { return conversation; }
     public void setConversation(Conversation conversation) { this.conversation = conversation; }
+
+    public List<MessageAttachment> getAttachments() { return attachments; }
+    public void setAttachments(List<MessageAttachment> attachments) { this.attachments = attachments; }
 }

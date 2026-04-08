@@ -5,15 +5,14 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tn.iset.investplatformpfe.Entity.*;
-import tn.iset.investplatformpfe.Repository.InternationalCompanyRepository;
-import tn.iset.investplatformpfe.Repository.InvestmentServiceRepository;
-import tn.iset.investplatformpfe.Repository.NotificationRepository;
+import tn.iset.investplatformpfe.Repository.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import tn.iset.investplatformpfe.Entity.CollaborationService;
 import tn.iset.investplatformpfe.Entity.InvestmentService;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 import tn.iset.investplatformpfe.Entity.TouristService;
@@ -26,12 +25,21 @@ public class NotificationService {
     private final NotificationRepository notificationRepository;
     private final InvestmentServiceRepository investmentServiceRepository;
     private final InternationalCompanyRepository internationalCompanyRepository;
-
+    private final InvestorRepository investorRepository;
+    private final EconomicPartnerRepository economicPartnerRepository;
+    private final TouristRepository touristRepository;
     public NotificationService(NotificationRepository notificationRepository,
+                               InvestorRepository investorRepository,
+                               EconomicPartnerRepository economicPartnerRepository,
+                               TouristRepository touristRepository,
                                InvestmentServiceRepository investmentServiceRepository,InternationalCompanyRepository internationalCompanyRepository) {
         this.notificationRepository = notificationRepository;
         this.investmentServiceRepository = investmentServiceRepository;
         this.internationalCompanyRepository = internationalCompanyRepository;
+        this.economicPartnerRepository=economicPartnerRepository;
+        this.investorRepository=investorRepository;
+        this.touristRepository=touristRepository;
+
     }
 
     // ========================================
@@ -62,23 +70,68 @@ public class NotificationService {
     // CRÉER UNE NOTIFICATION POUR TOUS LES UTILISATEURS D'UN RÔLE (BROADCAST)
     // ========================================
     @Transactional
-    public Notification createNotificationForRole(String title, String message,
-                                                  Role recipientRole,
-                                                  Long serviceId) {
-        log.info("📢 Création notification broadcast - Rôle: {}, ServiceId: {}", recipientRole, serviceId);
+    public List<Notification> createNotificationForRole(
+            String title, String message,
+            Role recipientRole, Long serviceId) {
 
-        Notification notification = new Notification();
-        notification.setTitle(title);
-        notification.setMessage(message);
-        notification.setRecipientRole(recipientRole);
-        notification.setRecipientId(null);
-        notification.setServiceId(serviceId);
-        notification.setRead(false);
+        log.info("📢 Création notifications individuelles - Rôle: {}, ServiceId: {}",
+                recipientRole, serviceId);
 
-        Notification saved = notificationRepository.save(notification);
-        log.info("✅ Notification broadcast créée avec ID: {}", saved.getId());
+        // Pour ADMIN : garder le broadcast (une seule notif, pas d'utilisateurs à lister)
+        if (recipientRole == Role.ADMIN) {
+            Notification notification = new Notification();
+            notification.setTitle(title);
+            notification.setMessage(message);
+            notification.setRecipientRole(recipientRole);
+            notification.setRecipientId(null); // broadcast admin
+            notification.setServiceId(serviceId);
+            notification.setRead(false);
+            Notification saved = notificationRepository.save(notification);
+            log.info("✅ Notification broadcast ADMIN créée ID: {}", saved.getId());
+            return List.of(saved);
+        }
 
+        // Pour les autres rôles : une notif individuelle par user
+        List<Long> userIds = getUserIdsByRole(recipientRole);
+
+        if (userIds.isEmpty()) {
+            log.warn("⚠️ Aucun utilisateur trouvé pour le rôle: {}", recipientRole);
+            return List.of();
+        }
+
+        List<Notification> notifications = new ArrayList<>();
+        for (Long userId : userIds) {
+            Notification notification = new Notification();
+            notification.setTitle(title);
+            notification.setMessage(message);
+            notification.setRecipientRole(recipientRole);
+            notification.setRecipientId(userId); // ← chaque user a SA propre notif
+            notification.setServiceId(serviceId);
+            notification.setRead(false);
+            notifications.add(notification);
+        }
+
+        List<Notification> saved = notificationRepository.saveAll(notifications);
+        log.info("✅ {} notifications individuelles créées pour rôle {}",
+                saved.size(), recipientRole);
         return saved;
+    }
+
+    // ─── Helper : IDs des users par rôle ───────────────────────────
+    private List<Long> getUserIdsByRole(Role role) {
+        return switch (role) {
+            case INVESTOR -> investorRepository.findAll()
+                    .stream().map(Investor::getId).collect(Collectors.toList());
+            case INTERNATIONAL_COMPANY -> internationalCompanyRepository.findAll()
+                    .stream().map(internationalcompany::getId).collect(Collectors.toList());
+            case PARTNER -> economicPartnerRepository.findAll()
+                    .stream().map(EconomicPartner::getId).collect(Collectors.toList());
+            case TOURIST -> touristRepository.findAll()  // ✅ AJOUTÉ
+                    .stream().map(Tourist::getId).collect(Collectors.toList());
+            case LOCAL_PARTNER -> List.of();  // Les notifications pour LOCAL_PARTNER sont individuelles
+            case ADMIN -> List.of();          // ADMIN utilise le broadcast
+            default -> List.of();
+        };
     }
 
     // ========================================
@@ -178,80 +231,34 @@ public class NotificationService {
 // ========================================
 // NOTIFICATION: Nouveau service investissement approuvé (vers INTERNATIONAL_COMPANY)
 // ========================================
+    // ── notifyInternationalCompaniesNewInvestmentService ──────────────
     @Transactional
     public void notifyInternationalCompaniesNewInvestmentService(InvestmentService service) {
-        log.info("██████████████████████████████████████████████████████████████");
-        log.info("██                                                        ██");
-        log.info("██   📢 NOTIFICATION INTERNATIONAL COMPANY - APPROBATION  ██");
-        log.info("██   Nouveau service d'investissement disponible         ██");
-        log.info("██                                                        ██");
-        log.info("██████████████████████████████████████████████████████████████");
+        if (service == null) return;
 
-        if (service == null) {
-            log.error("❌ Service est null - impossible d'envoyer notification");
-            return;
-        }
-
-        log.info("📌 ID du service: {}", service.getId());
-        log.info("📌 Titre: {}", service.getTitle());
-        log.info("📌 Provider: {} {}", service.getProvider().getFirstName(), service.getProvider().getLastName());
-        log.info("📌 Date: {}", LocalDateTime.now());
-
-        // ✅ MÊME FORMAT QUE LA NOTIFICATION DE MODIFICATION
         String title = "🔄 Nouveau service d'investissement disponible";
         String message = String.format(
-                "Un nouveau service d'investissement '%s' a été approuvé et est maintenant disponible.\n\n" +
-                        "📊 Détails du service :\n" +
-                        "• Titre : %s\n" +
-                        "• Montant total : %,.2f TND\n" +
-                        "• Montant minimum : %,.2f TND\n" +
-                        "• Région : %s\n" +
-                        "• Secteur : %s\n" +
-                        "• Partenaire : %s %s\n" +
-                        "• Disponibilité : %s\n\n" +
-                        "Connectez-vous pour voir cette nouvelle opportunité !",
+                "Un nouveau service d'investissement '%s' a été approuvé.\n\n" +
+                        "• Montant total : %,.2f TND\n• Région : %s\n• Secteur : %s",
                 service.getTitle(),
-                service.getTitle(),
-                service.getTotalAmount() != null ? service.getTotalAmount() : BigDecimal.ZERO,
-                service.getMinimumAmount() != null ? service.getMinimumAmount() : BigDecimal.ZERO,
-                service.getRegion() != null ? service.getRegion().getName() : "Non spécifiée",
-                service.getEconomicSector() != null ? service.getEconomicSector().getName() : "Non spécifié",
-                service.getProvider().getFirstName(),
-                service.getProvider().getLastName(),
-                service.getAvailability()
+                service.getTotalAmount() != null ? service.getTotalAmount() : java.math.BigDecimal.ZERO,
+                service.getRegion() != null ? service.getRegion().getName() : "N/A",
+                service.getEconomicSector() != null ? service.getEconomicSector().getName() : "N/A"
         );
 
-        try {
-            // ✅ CRÉER LA NOTIFICATION AVEC LE BON TITRE (COMME POUR LA MODIFICATION)
-            Notification notification = createNotificationForRole(
-                    title,
-                    message,
-                    Role.INTERNATIONAL_COMPANY,
-                    service.getId()
-            );
+        List<Notification> notifs = createNotificationForRole(
+                title, message, Role.INTERNATIONAL_COMPANY, service.getId());
 
-            notification.setServiceType("INVESTMENT");
-            notificationRepository.save(notification);
+        // Ajouter le serviceType sur chaque notif individuelle
+        notifs.forEach(n -> n.setServiceType("INVESTMENT"));
+        notificationRepository.saveAll(notifs);
 
-            log.info("✅ Notification d'approbation envoyée à toutes les sociétés internationales");
-            log.info("✅ Titre: {}", title);
-            log.info("✅ Notification ID: {}", notification.getId());
-
-        } catch (Exception e) {
-            log.error("❌ ERREUR lors de l'envoi de la notification d'approbation: {}", e.getMessage());
-            e.printStackTrace();
-        }
-
-        log.info("==============================================================");
+        log.info("✅ {} notifications INTERNATIONAL_COMPANY créées", notifs.size());
     }
 
-    // ========================================
-    // NOTIFICATION: Nouveau service collaboration approuvé (vers INTERNATIONAL_COMPANY)
-    // ========================================
+    // ── notifyInternationalCompaniesNewCollaborationService ───────────
     @Transactional
     public void notifyInternationalCompaniesNewCollaborationService(CollaborationService service) {
-        log.info("📢 Notification INTERNATIONAL_COMPANY - Nouvelle collaboration: {}", service.getName());
-
         String title = "New Collaboration Opportunity!";
         String message = String.format(
                 "A new collaboration service '%s' is now available in %s region",
@@ -259,13 +266,14 @@ public class NotificationService {
                 service.getRegion() != null ? service.getRegion().getName() : "your area"
         );
 
-        Notification notif = createNotificationForRole(title, message, Role.INTERNATIONAL_COMPANY, service.getId());
-        notif.setServiceType("COLLABORATION");
-        notificationRepository.save(notif);
+        List<Notification> notifs = createNotificationForRole(
+                title, message, Role.INTERNATIONAL_COMPANY, service.getId());
 
-        log.info("✅ Notification collaboration créée avec ID: {}", notif.getId());
+        notifs.forEach(n -> n.setServiceType("COLLABORATION"));
+        notificationRepository.saveAll(notifs);
+
+        log.info("✅ {} notifications collaboration INTERNATIONAL_COMPANY créées", notifs.size());
     }
-
     // ========================================
     // NOTIFICATION: Nouveau service collaboration approuvé (vers PARTNER)
     // ========================================
@@ -299,43 +307,37 @@ public class NotificationService {
     // RÉCUPÉRER LES NOTIFICATIONS D'UN UTILISATEUR
     // ========================================
     public List<Notification> getUserNotifications(Role role, Long userId) {
-        log.debug("Récupération notifications - Rôle: {}, UserId: {}", role, userId);
-
+        // Notifications personnelles (incluant celles créées par createNotificationForRole)
         List<Notification> personal = notificationRepository
                 .findByRecipientRoleAndRecipientIdOrderByCreatedAtDesc(role, userId);
 
-        List<Notification> broadcast = notificationRepository
-                .findByRecipientRoleAndRecipientIdIsNullOrderByCreatedAtDesc(role);
+        // Broadcast uniquement pour ADMIN
+        if (role == Role.ADMIN) {
+            List<Notification> broadcast = notificationRepository
+                    .findByRecipientRoleAndRecipientIdIsNullOrderByCreatedAtDesc(role);
+            personal.addAll(broadcast);
+            personal.sort((n1, n2) -> n2.getCreatedAt().compareTo(n1.getCreatedAt()));
+        }
 
-        personal.addAll(broadcast);
-        personal.sort((n1, n2) -> n2.getCreatedAt().compareTo(n1.getCreatedAt()));
-
-        log.debug("{} notifications trouvées", personal.size());
         return personal;
     }
-
     // ========================================
     // RÉCUPÉRER LES NOTIFICATIONS NON LUES
     // ========================================
     public List<Notification> getUnreadNotifications(Role role, Long userId) {
-        log.debug("Récupération notifications non lues - Rôle: {}, UserId: {}", role, userId);
-
         List<Notification> personal = notificationRepository
                 .findByRecipientRoleAndRecipientIdAndReadFalseOrderByCreatedAtDesc(role, userId);
 
-        List<Notification> broadcast = notificationRepository
-                .findByRecipientRoleAndRecipientIdIsNullOrderByCreatedAtDesc(role)
-                .stream()
-                .filter(n -> !n.isRead())
-                .collect(Collectors.toList());
+        if (role == Role.ADMIN) {
+            List<Notification> broadcast = notificationRepository
+                    .findByRecipientRoleAndRecipientIdIsNullOrderByCreatedAtDesc(role)
+                    .stream().filter(n -> !n.isRead()).collect(Collectors.toList());
+            personal.addAll(broadcast);
+            personal.sort((n1, n2) -> n2.getCreatedAt().compareTo(n1.getCreatedAt()));
+        }
 
-        personal.addAll(broadcast);
-        personal.sort((n1, n2) -> n2.getCreatedAt().compareTo(n1.getCreatedAt()));
-
-        log.debug("{} notifications non lues trouvées", personal.size());
         return personal;
     }
-
     // ========================================
     // MARQUER UNE NOTIFICATION COMME LUE
     // ========================================
@@ -931,27 +933,28 @@ public class NotificationService {
 // ========================================
     @Transactional
     public void deleteAllReadNotifications(Role userRole, Long userId) {
-        log.info("🗑️ Suppression de toutes les notifications lues pour {} ID: {}", userRole, userId);
+        log.info("🗑️ Suppression notifications lues pour {} ID: {}", userRole, userId);
 
-        // Récupérer les notifications personnelles lues
-        List<Notification> readPersonal = notificationRepository
-                .findByRecipientRoleAndRecipientIdAndReadTrue(userRole, userId);
+        List<Notification> toDelete = new ArrayList<>();
 
-        // Récupérer les notifications broadcast lues
-        List<Notification> readBroadcast = notificationRepository
-                .findByRecipientRoleAndRecipientIdIsNullAndReadTrue(userRole);
+        // Notifications personnelles lues
+        toDelete.addAll(notificationRepository
+                .findByRecipientRoleAndRecipientIdAndReadTrue(userRole, userId));
 
-        readPersonal.addAll(readBroadcast);
+        // Broadcast lues uniquement pour ADMIN
+        if (userRole == Role.ADMIN) {
+            toDelete.addAll(notificationRepository
+                    .findByRecipientRoleAndRecipientIdIsNullAndReadTrue(userRole));
+        }
 
-        if (readPersonal.isEmpty()) {
-            log.info("Aucune notification lue à supprimer pour {} ID: {}", userRole, userId);
+        if (toDelete.isEmpty()) {
+            log.info("Aucune notification lue à supprimer");
             return;
         }
 
-        notificationRepository.deleteAll(readPersonal);
-        log.info("✅ {} notifications lues supprimées", readPersonal.size());
+        notificationRepository.deleteAll(toDelete);
+        log.info("✅ {} notifications lues supprimées", toDelete.size());
     }
-
 
 
     @Transactional

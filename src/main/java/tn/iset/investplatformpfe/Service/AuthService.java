@@ -38,9 +38,12 @@ public class AuthService {
 
     private final InvestorRepository investorRepository;
     private final RestTemplate restTemplate;
+    private final UserSessionService sessionService;
 
-    public AuthService(InvestorRepository investorRepository) {
+
+    public AuthService(InvestorRepository investorRepository, UserSessionService sessionService) {
         this.investorRepository = investorRepository;
+        this.sessionService = sessionService;
         this.restTemplate = new RestTemplate();
     }
 
@@ -206,12 +209,33 @@ public class AuthService {
                     Map.class
             );
 
+
             return response.getBody();
+
         } catch (Exception e) {
             throw new RuntimeException("Erreur d'authentification: " + e.getMessage());
         }
     }
 
+    // ✅ NOUVELLE MÉTHODE
+    public void startSessionAfterLogin(String email, String role) {
+        try {
+            sessionService.startSession(email, role);
+            System.out.println("✅ Session démarrée pour " + email + " avec rôle: " + role);
+        } catch (Exception e) {
+            System.err.println("⚠️ Impossible de démarrer la session: " + e.getMessage());
+        }
+    }
+
+    // ✅ NOUVELLE MÉTHODE pour terminer la session
+    public void endSession(String email) {
+        try {
+            sessionService.endSession(email);
+            System.out.println("✅ Session terminée pour " + email);
+        } catch (Exception e) {
+            System.err.println("⚠️ Erreur fermeture session: " + e.getMessage());
+        }
+    }
     // ========================================
     // RAFRAÎCHIR LE TOKEN
     // ========================================
@@ -949,6 +973,39 @@ public class AuthService {
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException("Erreur lors du changement de mot de passe: " + e.getMessage());
+        }
+    }
+
+    // ========================================
+// RÉCUPÉRER L'EMAIL DEPUIS KEYCLOAK VIA LE SUB (userId)
+// ========================================
+    public String findEmailByKeycloakSub(String sub) {
+        try {
+            String adminToken = getAdminToken();
+            String userUrl = authServerUrl + "/admin/realms/" + realm + "/users/" + sub;
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setBearerAuth(adminToken);
+
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+
+            ResponseEntity<Map> response = restTemplate.exchange(
+                    userUrl,
+                    HttpMethod.GET,
+                    entity,
+                    Map.class
+            );
+
+            if (response.getBody() != null) {
+                String email = (String) response.getBody().get("email");
+                System.out.println("📧 Email trouvé via Keycloak sub: " + email);
+                return email;
+            }
+
+            return null;
+        } catch (Exception e) {
+            System.err.println("⚠️ Erreur récupération email Keycloak: " + e.getMessage());
+            return null;
         }
     }
 

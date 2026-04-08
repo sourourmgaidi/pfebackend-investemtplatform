@@ -32,12 +32,17 @@ public class AdminAuthService {
     private final EconomicPartnerRepository economicPartnerRepository;
     private final LocalPartnerRepository localPartnerRepository;
     private final InternationalCompanyRepository internationalCompanyRepository;
+    private final UserSessionService sessionService;
 
-    public AdminAuthService(AdminRepository adminRepository,InvestorRepository investorRepository,
-                            TouristRepository touristRepository,
-                            EconomicPartnerRepository economicPartnerRepository,
-                            LocalPartnerRepository localPartnerRepository,
-                            InternationalCompanyRepository internationalCompanyRepository) {
+
+    public AdminAuthService(
+            AdminRepository adminRepository,
+            InvestorRepository investorRepository,
+            TouristRepository touristRepository,
+            EconomicPartnerRepository economicPartnerRepository,
+            LocalPartnerRepository localPartnerRepository,
+            InternationalCompanyRepository internationalCompanyRepository,
+            UserSessionService sessionService) {  // ✅ AJOUTER
         this.adminRepository = adminRepository;
         this.restTemplate = new RestTemplate();
         this.investorRepository = investorRepository;
@@ -45,6 +50,42 @@ public class AdminAuthService {
         this.economicPartnerRepository = economicPartnerRepository;
         this.localPartnerRepository = localPartnerRepository;
         this.internationalCompanyRepository = internationalCompanyRepository;
+        this.sessionService = sessionService;  // ✅ AJOUTER
+    }
+
+    // ========================================
+// ✅ MÉTHODE POUR VÉRIFIER L'EMAIL DANS TOUTES LES TABLES
+// ========================================
+    private boolean isEmailAlreadyUsed(String email) {
+        System.out.println("🔍 Vérification email dans toutes les tables: " + email);
+
+        if (adminRepository.existsByEmail(email)) {
+            System.out.println("❌ Email trouvé dans Admin table");
+            return true;
+        }
+        if (investorRepository.existsByEmail(email)) {
+            System.out.println("❌ Email trouvé dans Investor table");
+            return true;
+        }
+        if (touristRepository.existsByEmail(email)) {
+            System.out.println("❌ Email trouvé dans Tourist table");
+            return true;
+        }
+        if (economicPartnerRepository.existsByEmail(email)) {
+            System.out.println("❌ Email trouvé dans EconomicPartner table");
+            return true;
+        }
+        if (localPartnerRepository.existsByEmail(email)) {
+            System.out.println("❌ Email trouvé dans LocalPartner table");
+            return true;
+        }
+        if (internationalCompanyRepository.existsByEmail(email)) {
+            System.out.println("❌ Email trouvé dans InternationalCompany table");
+            return true;
+        }
+
+        System.out.println("✅ Email disponible pour inscription");
+        return false;
     }
 
     // ========================================
@@ -83,29 +124,23 @@ public class AdminAuthService {
         String lastName = (String) userData.get("lastName");
         String firstName = (String) userData.get("firstName");
 
-        // Vérifier les champs obligatoires
         if (email == null || password == null || lastName == null || firstName == null) {
             throw new RuntimeException("Tous les champs obligatoires doivent être remplis");
         }
 
-        // ✅ VALIDATION GMAIL
         if (!isGmail(email)) {
             throw new RuntimeException("Seules les adresses Gmail sont autorisées. Veuillez utiliser une adresse Gmail valide (ex: @gmail.com, @gmail.fr, etc.)");
         }
 
-        // Vérifier si l'email existe déjà
-        if (adminRepository.existsByEmail(email)) {
-            throw new RuntimeException("Cet email est déjà utilisé");
+        // ✅ VÉRIFIER L'EMAIL DANS TOUTES LES TABLES
+        if (isEmailAlreadyUsed(email)) {
+            throw new RuntimeException("Cet email est déjà utilisé. Veuillez utiliser une autre adresse email.");
         }
 
         try {
-            // Créer l'utilisateur dans Keycloak
             String userId = createUserInKeycloak(email, password, lastName, firstName);
-
-            // Assigner le rôle ADMIN dans Keycloak
             assignRoleToUser(userId, "ADMIN");
 
-            // Créer dans MySQL
             Admin newAdmin = new Admin();
             newAdmin.setEmail(email);
             newAdmin.setPassword(password);
@@ -115,7 +150,6 @@ public class AdminAuthService {
             newAdmin.setRole(Role.ADMIN);
             newAdmin.setRegistrationDate(LocalDateTime.now());
 
-            // Champs optionnels
             if (userData.containsKey("phone")) {
                 newAdmin.setPhone((String) userData.get("phone"));
             }
@@ -141,10 +175,12 @@ public class AdminAuthService {
             throw new RuntimeException("Erreur lors de l'inscription: " + e.getMessage());
         }
     }
-
     // ========================================
     // CONNEXION
     // ========================================
+    // ========================================
+// CONNEXION AVEC DÉMARRAGE DE SESSION
+// ========================================
     public Map<String, Object> login(String email, String password) {
         String tokenUrl = authServerUrl + "/realms/" + realm + "/protocol/openid-connect/token";
 
@@ -161,17 +197,71 @@ public class AdminAuthService {
 
         try {
             ResponseEntity<Map> response = restTemplate.exchange(
-                    tokenUrl,
-                    HttpMethod.POST,
-                    entity,
-                    Map.class
-            );
+                    tokenUrl, HttpMethod.POST, entity, Map.class);
+
+            // ✅ PLUS DE SESSION ICI — gérée dans le controller
             return response.getBody();
+
         } catch (Exception e) {
             throw new RuntimeException("Erreur d'authentification: " + e.getMessage());
         }
     }
+    // ========================================
+// DÉCONNEXION AVEC EMAIL — FERME LA SESSION
+// ========================================
+    public void logoutWithEmail(String refreshToken, String email) {
+        System.out.println("🔓 Logout admin demandé pour: " + email);
 
+        // 1. Déconnexion Keycloak
+        try {
+            String logoutUrl = authServerUrl + "/realms/" + realm + "/protocol/openid-connect/logout";
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+
+            MultiValueMap<String, String> map = new LinkedMultiValueMap<>();
+            map.add("client_id", clientId);
+            map.add("refresh_token", refreshToken);
+
+            restTemplate.postForEntity(logoutUrl, new HttpEntity<>(map, headers), String.class);
+            System.out.println("✅ Déconnexion Keycloak réussie pour admin: " + email);
+
+        } catch (Exception e) {
+            System.err.println("⚠️ Erreur Keycloak logout pour admin: " + e.getMessage());
+            // On continue pour fermer la session locale
+        }
+
+        // 2. Fermeture session locale
+        try {
+            UserSession ended = sessionService.endSession(email);
+            if (ended != null) {
+                System.out.println("✅ Session admin terminée - Durée: " + ended.getDurationSeconds() + "s");
+            } else {
+                System.out.println("⚠️ Aucune session active trouvée pour admin: " + email);
+            }
+        } catch (Exception e) {
+            System.err.println("❌ Erreur fermeture session admin: " + e.getMessage());
+            throw new RuntimeException("Logout error: " + e.getMessage());
+        }
+    }
+    // DÉMARRER LA SESSION (appelé depuis le controller)
+    public void startSessionAfterLogin(String email, String role) {
+        try {
+            sessionService.startSession(email, role);
+            System.out.println("✅ Session démarrée pour admin " + email + " avec rôle: " + role);
+        } catch (Exception e) {
+            System.err.println("⚠️ Impossible de démarrer la session admin: " + e.getMessage());
+        }
+    }
+    // ✅ TERMINER LA SESSION (appelé depuis le controller)
+    public void endSession(String email) {
+        try {
+            sessionService.endSession(email);
+            System.out.println("✅ Session admin terminée pour " + email);
+        } catch (Exception e) {
+            System.err.println("⚠️ Erreur fermeture session admin: " + e.getMessage());
+        }
+    }
     // ========================================
     // RAFRAÎCHIR LE TOKEN
     // ========================================
@@ -290,7 +380,8 @@ public class AdminAuthService {
                     }
 
                     // Vérifier que le nouvel email n'est pas déjà utilisé
-                    if (adminRepository.existsByEmail(newEmail)) {
+                    // ✅ Vérifier dans TOUTES les tables
+                    if (isEmailAlreadyUsed(newEmail) && !newEmail.equals(existing.getEmail())) {
                         throw new RuntimeException("Cet email est déjà utilisé: " + newEmail);
                     }
                     emailChanged = true;
@@ -596,40 +687,42 @@ public class AdminAuthService {
     // ========================================
 // ✅ SUPPRESSION DU PROPRE COMPTE DE L'ADMIN (AVEC MOT DE PASSE)
 // ========================================
+    // ========================================
+// SUPPRESSION DU PROPRE COMPTE DE L'ADMIN
+// ========================================
     @Transactional
     public Map<String, Object> deleteOwnAccount(String email, String password) {
 
-        // 1. Vérifier que l'admin existe dans MySQL
         Admin admin = adminRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Admin non trouvé dans la base de données"));
 
         try {
-            // 2. Obtenir un token admin pour Keycloak
             String adminToken = getAdminToken();
-
-            // 3. Récupérer l'ID de l'utilisateur dans Keycloak
             String userId = getUserIdByEmail(email, adminToken);
 
             if (userId == null) {
                 throw new RuntimeException("Utilisateur non trouvé dans Keycloak");
             }
 
-            // 4. Valider le mot de passe (pour confirmer l'identité)
             try {
                 validatePasswordWithKeycloak(email, password);
             } catch (Exception e) {
                 throw new RuntimeException("Mot de passe incorrect. Suppression annulée.");
             }
 
-            // 5. Supprimer l'utilisateur de Keycloak
+            // ✅ TERMINER LA SESSION AVANT SUPPRESSION
+            try {
+                sessionService.endSession(email);
+            } catch (Exception sessionEx) {
+                System.err.println("⚠️ Impossible de fermer la session admin: " + sessionEx.getMessage());
+            }
+
             deleteUserFromKeycloak(userId, adminToken);
             System.out.println("✅ Admin supprimé de Keycloak: " + userId);
 
-            // 6. Supprimer l'utilisateur de MySQL
             adminRepository.delete(admin);
             System.out.println("✅ Admin supprimé de MySQL: " + email);
 
-            // 7. Préparer la réponse
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("message", "Votre compte admin a été supprimé avec succès");
@@ -642,7 +735,6 @@ public class AdminAuthService {
             throw new RuntimeException("Erreur lors de la suppression de votre compte: " + e.getMessage());
         }
     }
-
     // ========================================
 // ✅ SUPPRESSION D'UN COMPTE UTILISATEUR (PAR L'ADMIN)
 // ========================================
@@ -1375,6 +1467,31 @@ public class AdminAuthService {
 
         return results;
     }
+
+    public String findEmailByKeycloakSub(String sub) {
+        try {
+            String adminToken = getAdminToken();
+            String userUrl = authServerUrl + "/admin/realms/" + realm + "/users/" + sub;
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setBearerAuth(adminToken);
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+
+            ResponseEntity<Map> response = restTemplate.exchange(
+                    userUrl, HttpMethod.GET, entity, Map.class);
+
+            if (response.getBody() != null) {
+                String email = (String) response.getBody().get("email");
+                System.out.println("📧 Email admin trouvé via Keycloak sub: " + email);
+                return email;
+            }
+            return null;
+        } catch (Exception e) {
+            System.err.println("❌ Erreur findEmailByKeycloakSub admin: " + e.getMessage());
+            return null;
+        }
+    }
+
 
 }
 

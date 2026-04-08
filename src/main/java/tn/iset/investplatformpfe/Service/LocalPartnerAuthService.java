@@ -11,8 +11,7 @@ import tn.iset.investplatformpfe.Entity.ActivityDomain;
 import tn.iset.investplatformpfe.Entity.LocalPartner;
 import tn.iset.investplatformpfe.Entity.Region;
 import tn.iset.investplatformpfe.Entity.Role;
-import tn.iset.investplatformpfe.Repository.LocalPartnerRepository;
-import tn.iset.investplatformpfe.Repository.RegionRepository;
+import tn.iset.investplatformpfe.Repository.*;
 
 import java.time.LocalDateTime;
 import java.util.Arrays;
@@ -32,16 +31,63 @@ public class LocalPartnerAuthService {
     @Value("${keycloak.resource}")
     private String clientId;
 
+    // ✅ TOUS LES REPOSITORIES
+    private final UserSessionService sessionService;
     private final LocalPartnerRepository partnerRepository;
-    private final RegionRepository regionRepository;  // ✅ AJOUTÉ
+    private final RegionRepository regionRepository;
+    private final InvestorRepository investorRepository;
+    private final TouristRepository touristRepository;
+    private final EconomicPartnerRepository economicPartnerRepository;
+    private final InternationalCompanyRepository internationalCompanyRepository;
     private final RestTemplate restTemplate;
 
     public LocalPartnerAuthService(
             LocalPartnerRepository partnerRepository,
-            RegionRepository regionRepository) {  // ✅ AJOUTÉ
+            RegionRepository regionRepository,
+            InvestorRepository investorRepository,
+            TouristRepository touristRepository,
+            EconomicPartnerRepository economicPartnerRepository,
+            InternationalCompanyRepository internationalCompanyRepository,
+            UserSessionService sessionService) {
         this.partnerRepository = partnerRepository;
-        this.regionRepository = regionRepository;  // ✅ AJOUTÉ
+        this.regionRepository = regionRepository;
+        this.investorRepository = investorRepository;
+        this.touristRepository = touristRepository;
+        this.economicPartnerRepository = economicPartnerRepository;
+        this.internationalCompanyRepository = internationalCompanyRepository;
+        this.sessionService = sessionService;
         this.restTemplate = new RestTemplate();
+    }
+
+    // ========================================
+    // ✅ MÉTHODE POUR VÉRIFIER L'EMAIL DANS TOUTES LES TABLES
+    // ========================================
+    private boolean isEmailAlreadyUsed(String email) {
+        System.out.println("🔍 Vérification email dans toutes les tables: " + email);
+
+        if (partnerRepository.existsByEmail(email)) {
+            System.out.println("❌ Email trouvé dans LocalPartner table");
+            return true;
+        }
+        if (investorRepository.existsByEmail(email)) {
+            System.out.println("❌ Email trouvé dans Investor table");
+            return true;
+        }
+        if (touristRepository.existsByEmail(email)) {
+            System.out.println("❌ Email trouvé dans Tourist table");
+            return true;
+        }
+        if (economicPartnerRepository.existsByEmail(email)) {
+            System.out.println("❌ Email trouvé dans EconomicPartner table");
+            return true;
+        }
+        if (internationalCompanyRepository.existsByEmail(email)) {
+            System.out.println("❌ Email trouvé dans InternationalCompany table");
+            return true;
+        }
+
+        System.out.println("✅ Email disponible pour inscription");
+        return false;
     }
 
     // ========================================
@@ -52,7 +98,6 @@ public class LocalPartnerAuthService {
 
         String domain = email.substring(email.indexOf("@") + 1).toLowerCase();
 
-        // Liste des domaines Gmail acceptés
         List<String> gmailDomains = Arrays.asList(
                 "gmail.com",
                 "googlemail.com",
@@ -70,7 +115,7 @@ public class LocalPartnerAuthService {
     }
 
     // ========================================
-    // INSCRIPTION - AVEC RÉGION
+    // INSCRIPTION - AVEC VÉRIFICATION DANS TOUTES LES TABLES
     // ========================================
     @Transactional
     public Map<String, Object> register(Map<String, Object> userData) {
@@ -88,8 +133,9 @@ public class LocalPartnerAuthService {
             throw new RuntimeException("Only Gmail addresses are allowed. Please use a valid Gmail address (e.g., @gmail.com, @gmail.fr, etc.)");
         }
 
-        if (partnerRepository.existsByEmail(email)) {
-            throw new RuntimeException("This email is already in use");
+        // ✅ VÉRIFIER L'EMAIL DANS TOUTES LES TABLES
+        if (isEmailAlreadyUsed(email)) {
+            throw new RuntimeException("This email is already in use. Please use a different email address.");
         }
 
         try {
@@ -126,15 +172,12 @@ public class LocalPartnerAuthService {
                 Region region = null;
 
                 if (regionObj instanceof String) {
-                    // Si c'est le nom de la région (ex: "Tunis")
                     String regionName = (String) regionObj;
                     region = regionRepository.findByName(regionName).orElse(null);
                 } else if (regionObj instanceof Number) {
-                    // Si c'est l'ID de la région
                     Long regionId = ((Number) regionObj).longValue();
                     region = regionRepository.findById(regionId).orElse(null);
                 } else if (regionObj instanceof Map) {
-                    // Si c'est un objet région complet
                     Map<String, Object> regionMap = (Map<String, Object>) regionObj;
                     if (regionMap.containsKey("id")) {
                         Long regionId = ((Number) regionMap.get("id")).longValue();
@@ -280,6 +323,25 @@ public class LocalPartnerAuthService {
             throw new RuntimeException("Logout error: " + e.getMessage());
         }
     }
+    // ✅ DÉMARRER LA SESSION APRÈS LOGIN
+    public void startSessionAfterLogin(String email, String role) {
+        try {
+            sessionService.startSession(email, role);
+            System.out.println("✅ Session démarrée pour " + email + " avec rôle: " + role);
+        } catch (Exception e) {
+            System.err.println("⚠️ Impossible de démarrer la session: " + e.getMessage());
+        }
+    }
+
+    // ✅ TERMINER LA SESSION
+    public void endSession(String email) {
+        try {
+            sessionService.endSession(email);
+            System.out.println("✅ Session terminée pour " + email);
+        } catch (Exception e) {
+            System.err.println("⚠️ Erreur fermeture session: " + e.getMessage());
+        }
+    }
 
     // ========================================
     // RÉCUPÉRER LE PROFIL - COMPLET
@@ -302,7 +364,6 @@ public class LocalPartnerAuthService {
         profile.put("role", partner.getRole());
         profile.put("linkedinProfile", partner.getLinkedinProfile());
 
-        // ✅ RÉGION - avec getName()
         profile.put("region", partner.getRegion() != null ? partner.getRegion().getName() : null);
         profile.put("regionId", partner.getRegion() != null ? partner.getRegion().getId() : null);
 
@@ -314,7 +375,7 @@ public class LocalPartnerAuthService {
     }
 
     // ========================================
-    // METTRE À JOUR LE PROFIL - AVEC RÉGION
+    // METTRE À JOUR LE PROFIL - AVEC VÉRIFICATION DANS TOUTES LES TABLES
     // ========================================
     @Transactional
     public Map<String, Object> updateProfile(String email, Map<String, Object> userData) {
@@ -347,7 +408,7 @@ public class LocalPartnerAuthService {
                 keycloakUpdates.put("firstName", newFirstName);
             }
 
-            // GESTION DE L'EMAIL
+            // GESTION DE L'EMAIL AVEC VÉRIFICATION DANS TOUTES LES TABLES
             if (userData.containsKey("email")) {
                 newEmail = (String) userData.get("email");
 
@@ -355,7 +416,8 @@ public class LocalPartnerAuthService {
                     if (!isGmail(newEmail)) {
                         throw new RuntimeException("The new email must be a valid Gmail address");
                     }
-                    if (partnerRepository.existsByEmail(newEmail)) {
+                    // ✅ Vérifier dans TOUTES les tables
+                    if (isEmailAlreadyUsed(newEmail) && !newEmail.equals(existing.getEmail())) {
                         throw new RuntimeException("Email already in use: " + newEmail);
                     }
                     emailChanged = true;
@@ -377,7 +439,7 @@ public class LocalPartnerAuthService {
                 existing.setDescription((String) userData.get("description"));
             }
 
-            // ✅ RÉGION - Mise à jour
+            // RÉGION - Mise à jour
             if (userData.containsKey("region")) {
                 Object regionObj = userData.get("region");
                 if (regionObj == null) {
@@ -840,32 +902,28 @@ public class LocalPartnerAuthService {
             throw new RuntimeException("Incorrect password");
         }
     }
+
+    // ========================================
     // CHANGER LE MOT DE PASSE (PARTENAIRE LOCAL CONNECTÉ)
-// ========================================
+    // ========================================
     @Transactional
     public Map<String, Object> changePassword(String email, String oldPassword, String newPassword) {
 
-        // 1. Vérifier que l'utilisateur existe dans MySQL
         LocalPartner partner = partnerRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Partner not found in database"));
 
-        // 2. Validation du nouveau mot de passe
         if (newPassword == null || newPassword.length() < 6) {
             throw new RuntimeException("Le nouveau mot de passe doit contenir au moins 6 caractères");
         }
 
         try {
-            // 3. Obtenir un token admin pour Keycloak
             String adminToken = getAdminToken();
-
-            // 4. Récupérer l'ID de l'utilisateur dans Keycloak
             String userId = getUserIdByEmail(email, adminToken);
 
             if (userId == null) {
                 throw new RuntimeException("Utilisateur non trouvé dans Keycloak");
             }
 
-            // 5. Valider l'ancien mot de passe avec Keycloak
             try {
                 validatePasswordWithKeycloak(email, oldPassword);
                 System.out.println("✅ Ancien mot de passe validé pour: " + email);
@@ -873,16 +931,13 @@ public class LocalPartnerAuthService {
                 throw new RuntimeException("Ancien mot de passe incorrect");
             }
 
-            // 6. Mettre à jour le mot de passe dans Keycloak
             updatePasswordInKeycloak(userId, newPassword, adminToken);
             System.out.println("✅ Mot de passe mis à jour dans Keycloak pour: " + email);
 
-            // 7. Mettre à jour le mot de passe dans MySQL
             partner.setPassword(newPassword);
             partnerRepository.save(partner);
             System.out.println("✅ Mot de passe mis à jour dans MySQL pour: " + email);
 
-            // 8. Préparer la réponse
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("message", "Mot de passe changé avec succès");
@@ -895,5 +950,4 @@ public class LocalPartnerAuthService {
             throw new RuntimeException("Erreur lors du changement de mot de passe: " + e.getMessage());
         }
     }
-
 }

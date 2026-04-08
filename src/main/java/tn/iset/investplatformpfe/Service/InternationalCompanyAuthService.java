@@ -10,7 +10,7 @@ import org.springframework.web.client.RestTemplate;
 import tn.iset.investplatformpfe.Entity.ActivityDomain;
 import tn.iset.investplatformpfe.Entity.Role;
 import tn.iset.investplatformpfe.Entity.internationalcompany;
-import tn.iset.investplatformpfe.Repository.InternationalCompanyRepository;
+import tn.iset.investplatformpfe.Repository.*;
 
 import java.time.LocalDateTime;
 import java.util.Arrays;
@@ -36,12 +36,60 @@ public class InternationalCompanyAuthService {
     @Value("${keycloak.admin-password:admin}")
     private String adminPassword;
 
+    // ✅ TOUS LES REPOSITORIES
     private final InternationalCompanyRepository companyRepository;
+    private final InvestorRepository investorRepository;
+    private final TouristRepository touristRepository;
+    private final EconomicPartnerRepository economicPartnerRepository;
+    private final LocalPartnerRepository localPartnerRepository;
     private final RestTemplate restTemplate;
+    private final UserSessionService sessionService;
 
-    public InternationalCompanyAuthService(InternationalCompanyRepository companyRepository) {
+    public InternationalCompanyAuthService(
+            InternationalCompanyRepository companyRepository,
+            InvestorRepository investorRepository,
+            TouristRepository touristRepository,
+            EconomicPartnerRepository economicPartnerRepository,
+            LocalPartnerRepository localPartnerRepository,
+            UserSessionService sessionService) {        // ✅ AJOUT
         this.companyRepository = companyRepository;
+        this.investorRepository = investorRepository;
+        this.touristRepository = touristRepository;
+        this.economicPartnerRepository = economicPartnerRepository;
+        this.localPartnerRepository = localPartnerRepository;
         this.restTemplate = new RestTemplate();
+        this.sessionService = sessionService;           // ✅ AJOUT
+    }
+
+    // ========================================
+    // ✅ MÉTHODE POUR VÉRIFIER L'EMAIL DANS TOUTES LES TABLES
+    // ========================================
+    private boolean isEmailAlreadyUsed(String email) {
+        System.out.println("🔍 Vérification email dans toutes les tables: " + email);
+
+        if (companyRepository.existsByEmail(email)) {
+            System.out.println("❌ Email trouvé dans InternationalCompany table");
+            return true;
+        }
+        if (investorRepository.existsByEmail(email)) {
+            System.out.println("❌ Email trouvé dans Investor table");
+            return true;
+        }
+        if (touristRepository.existsByEmail(email)) {
+            System.out.println("❌ Email trouvé dans Tourist table");
+            return true;
+        }
+        if (economicPartnerRepository.existsByEmail(email)) {
+            System.out.println("❌ Email trouvé dans EconomicPartner table");
+            return true;
+        }
+        if (localPartnerRepository.existsByEmail(email)) {
+            System.out.println("❌ Email trouvé dans LocalPartner table");
+            return true;
+        }
+
+        System.out.println("✅ Email disponible pour inscription");
+        return false;
     }
 
     // ========================================
@@ -52,7 +100,6 @@ public class InternationalCompanyAuthService {
 
         String domain = email.substring(email.indexOf("@") + 1).toLowerCase();
 
-        // Liste des domaines Gmail acceptés
         List<String> gmailDomains = Arrays.asList(
                 "gmail.com",
                 "googlemail.com",
@@ -70,7 +117,7 @@ public class InternationalCompanyAuthService {
     }
 
     // ========================================
-    // INSCRIPTION - AVEC VALIDATION GMAIL
+    // INSCRIPTION - AVEC VÉRIFICATION DANS TOUTES LES TABLES
     // ========================================
     @Transactional
     public Map<String, Object> register(Map<String, Object> userData) {
@@ -85,7 +132,7 @@ public class InternationalCompanyAuthService {
         String activitySector = (String) userData.get("activitySector");
         String siret = (String) userData.get("siret");
 
-        // Vérifier les champs obligatoires (sans interetPrincipal)
+        // Vérifier les champs obligatoires
         if (email == null || password == null || companyName == null ||
                 contactLastName == null || contactFirstName == null || phone == null ||
                 originCountry == null || activitySector == null || siret == null) {
@@ -97,9 +144,9 @@ public class InternationalCompanyAuthService {
             throw new RuntimeException("Only Gmail addresses are allowed. Please use a valid Gmail address (e.g., @gmail.com, @gmail.fr, etc.)");
         }
 
-        // Vérifier si l'email existe déjà
-        if (companyRepository.existsByEmail(email)) {
-            throw new RuntimeException("This email is already in use");
+        // ✅ VÉRIFIER L'EMAIL DANS TOUTES LES TABLES
+        if (isEmailAlreadyUsed(email)) {
+            throw new RuntimeException("This email is already in use. Please use a different email address.");
         }
 
         // Vérifier si le SIRET existe déjà
@@ -124,7 +171,6 @@ public class InternationalCompanyAuthService {
             newCompany.setPhone(phone);
             newCompany.setOriginCountry(originCountry);
 
-            // ✅ CORRECTION: Convertir String → ActivityDomain
             try {
                 ActivityDomain domain = ActivityDomain.valueOf(activitySector.toUpperCase());
                 newCompany.setActivitySector(domain);
@@ -249,8 +295,53 @@ public class InternationalCompanyAuthService {
         }
     }
 
+    // ✅ DÉMARRER LA SESSION
+    public void startSessionAfterLogin(String email, String role) {
+        try {
+            sessionService.startSession(email, role);
+            System.out.println("✅ Session démarrée pour " + email + " avec rôle: " + role);
+        } catch (Exception e) {
+            System.err.println("⚠️ Impossible de démarrer la session: " + e.getMessage());
+        }
+    }
+
+    // ✅ TERMINER LA SESSION
+    public void endSession(String email) {
+        try {
+            sessionService.endSession(email);
+            System.out.println("✅ Session terminée pour " + email);
+        } catch (Exception e) {
+            System.err.println("⚠️ Erreur fermeture session: " + e.getMessage());
+        }
+    }
+
+    // ✅ RÉCUPÉRER L'EMAIL VIA KEYCLOAK SUB
+    public String findEmailByKeycloakSub(String sub) {
+        try {
+            String adminToken = getAdminToken();
+            String userUrl = authServerUrl + "/admin/realms/" + realm + "/users/" + sub;
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setBearerAuth(adminToken);
+            HttpEntity<?> entity = new HttpEntity<>(headers);
+
+            ResponseEntity<Map> response = restTemplate.exchange(
+                    userUrl, HttpMethod.GET, entity, Map.class);
+
+            if (response.getBody() != null) {
+                String email = (String) response.getBody().get("email");
+                System.out.println("📧 Email trouvé via Keycloak sub: " + email);
+                return email;
+            }
+            return null;
+        } catch (Exception e) {
+            System.err.println("⚠️ Erreur findEmailByKeycloakSub: " + e.getMessage());
+            return null;
+        }
+    }
+
     // ========================================
-    // RÉCUPÉRER LE PROFIL - (sans interetPrincipal)
+    // RÉCUPÉRER LE PROFIL
     // ========================================
     public Map<String, Object> getProfile(String email) {
 
@@ -265,7 +356,6 @@ public class InternationalCompanyAuthService {
         profile.put("contactFirstName", company.getContactFirstName());
         profile.put("phone", company.getPhone());
         profile.put("originCountry", company.getOriginCountry());
-        // ✅ Conversion de l'enum en String
         profile.put("activitySector", company.getActivitySector() != null ? company.getActivitySector().name() : null);
         profile.put("siret", company.getSiret());
         profile.put("website", company.getWebsite());
@@ -277,10 +367,8 @@ public class InternationalCompanyAuthService {
     }
 
     // ========================================
-    // METTRE À JOUR LE PROFIL - AVEC VALIDATION GMAIL
-// ========================================
-// METTRE À JOUR LE PROFIL - AVEC VALIDATION GMAIL
-// ========================================
+    // METTRE À JOUR LE PROFIL - AVEC VÉRIFICATION DANS TOUTES LES TABLES
+    // ========================================
     @Transactional
     public Map<String, Object> updateProfile(String email, Map<String, Object> userData) {
 
@@ -299,17 +387,16 @@ public class InternationalCompanyAuthService {
             boolean emailChanged = false;
             String newEmail = null;
 
-            // GESTION DE L'EMAIL AVEC VALIDATION GMAIL
+            // GESTION DE L'EMAIL AVEC VÉRIFICATION DANS TOUTES LES TABLES
             if (userData.containsKey("email")) {
                 newEmail = (String) userData.get("email");
 
                 if (!newEmail.equals(existing.getEmail())) {
-                    // ✅ VALIDATION GMAIL POUR LE NOUVEL EMAIL
                     if (!isGmail(newEmail)) {
                         throw new RuntimeException("The new email must be a valid Gmail address");
                     }
-
-                    if (companyRepository.existsByEmail(newEmail)) {
+                    // ✅ Vérifier dans TOUTES les tables
+                    if (isEmailAlreadyUsed(newEmail) && !newEmail.equals(existing.getEmail())) {
                         throw new RuntimeException("Email already in use: " + newEmail);
                     }
                     emailChanged = true;
@@ -337,14 +424,14 @@ public class InternationalCompanyAuthService {
                 existing.setOriginCountry((String) userData.get("originCountry"));
             }
 
-            // ✅ AJOUT CRUCIAL: Mise à jour du SIRET
+            // Mise à jour du SIRET
             if (userData.containsKey("siret")) {
                 String newSiret = (String) userData.get("siret");
                 System.out.println("📥 Mise à jour SIRET: '" + newSiret + "'");
                 existing.setSiret(newSiret);
             }
 
-            // ✅ CORRECTION: Convertir String → ActivityDomain pour la mise à jour
+            // Mise à jour du secteur d'activité
             if (userData.containsKey("activitySector") && userData.get("activitySector") != null) {
                 String sectorStr = (String) userData.get("activitySector");
                 try {
@@ -388,7 +475,6 @@ public class InternationalCompanyAuthService {
             // 3. Sauvegarder dans MySQL
             internationalcompany updated = companyRepository.save(existing);
 
-            // ✅ Log pour vérification
             System.out.println("✅ SIRET après sauvegarde: '" + updated.getSiret() + "'");
 
             Map<String, Object> response = new HashMap<>();
@@ -406,6 +492,8 @@ public class InternationalCompanyAuthService {
             throw new RuntimeException("Error during profile update: " + e.getMessage());
         }
     }
+
+    // ========================================
     // MOT DE PASSE OUBLIÉ
     // ========================================
     public Map<String, Object> forgotPassword(String email) {
@@ -604,7 +692,6 @@ public class InternationalCompanyAuthService {
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setBearerAuth(adminToken);
 
-        // ✅ Créer un safeUpdates sans username
         Map<String, Object> safeUpdates = new HashMap<>();
         if (updates.containsKey("firstName")) {
             safeUpdates.put("firstName", updates.get("firstName"));
@@ -619,9 +706,6 @@ public class InternationalCompanyAuthService {
         }
     }
 
-    // ========================================
-    // Mettre à jour l'email dans Keycloak
-    // ========================================
     private void updateEmailInKeycloak(String userId, String newEmail, String adminToken) {
         String updateUrl = authServerUrl + "/admin/realms/" + realm + "/users/" + userId;
 
@@ -676,43 +760,36 @@ public class InternationalCompanyAuthService {
 
         restTemplate.exchange(passwordUrl, HttpMethod.PUT, entity, String.class);
     }
+
     // ========================================
-// SUPPRESSION DE COMPTE PAR L'UTILISATEUR (AVEC MOT DE PASSE)
-// ========================================
+    // SUPPRESSION DE COMPTE PAR L'UTILISATEUR
+    // ========================================
     @Transactional
     public Map<String, Object> deleteAccount(String email, String password) {
 
-        // 1. Vérifier que l'utilisateur existe dans MySQL
         internationalcompany company = companyRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Company not found in database"));
 
         try {
-            // 2. Obtenir un token admin pour Keycloak
             String adminToken = getAdminToken();
-
-            // 3. Récupérer l'ID de l'utilisateur dans Keycloak
             String userId = getUserIdByEmail(email, adminToken);
 
             if (userId == null) {
                 throw new RuntimeException("User not found in Keycloak");
             }
 
-            // 4. Valider le mot de passe (pour confirmer l'identité)
             try {
                 validatePasswordWithKeycloak(email, password);
             } catch (Exception e) {
                 throw new RuntimeException("Incorrect password. Deletion cancelled.");
             }
 
-            // 5. Supprimer l'utilisateur de Keycloak
             deleteUserFromKeycloak(userId, adminToken);
             System.out.println("✅ User deleted from Keycloak: " + userId);
 
-            // 6. Supprimer l'utilisateur de MySQL
             companyRepository.delete(company);
             System.out.println("✅ User deleted from MySQL: " + email);
 
-            // 7. Préparer la réponse
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("message", "Account deleted successfully");
@@ -727,35 +804,28 @@ public class InternationalCompanyAuthService {
     }
 
     // ========================================
-// SUPPRESSION DE COMPTE PAR L'ADMIN (SANS MOT DE PASSE)
-// ========================================
+    // SUPPRESSION DE COMPTE PAR L'ADMIN
+    // ========================================
     @Transactional
     public Map<String, Object> deleteAccountByAdmin(String email) {
 
-        // 1. Vérifier que l'utilisateur existe dans MySQL
         internationalcompany company = companyRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Company not found in database"));
 
         try {
-            // 2. Obtenir un token admin pour Keycloak
             String adminToken = getAdminToken();
-
-            // 3. Récupérer l'ID de l'utilisateur dans Keycloak
             String userId = getUserIdByEmail(email, adminToken);
 
             if (userId != null) {
-                // 4. Supprimer l'utilisateur de Keycloak
                 deleteUserFromKeycloak(userId, adminToken);
                 System.out.println("✅ User deleted from Keycloak: " + userId);
             } else {
                 System.out.println("⚠️ User not found in Keycloak, deleting only from MySQL");
             }
 
-            // 5. Supprimer l'utilisateur de MySQL
             companyRepository.delete(company);
             System.out.println("✅ User deleted from MySQL: " + email);
 
-            // 6. Préparer la réponse
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("message", "Account deleted successfully by admin");
@@ -769,13 +839,10 @@ public class InternationalCompanyAuthService {
         }
     }
 
-// ========================================
-// MÉTHODES PRIVÉES SUPPLÉMENTAIRES
-// ========================================
+    // ========================================
+    // MÉTHODES PRIVÉES SUPPLÉMENTAIRES
+    // ========================================
 
-    /**
-     * Supprimer un utilisateur de Keycloak
-     */
     private void deleteUserFromKeycloak(String userId, String adminToken) {
         String deleteUrl = authServerUrl + "/admin/realms/" + realm + "/users/" + userId;
 
@@ -796,9 +863,6 @@ public class InternationalCompanyAuthService {
         }
     }
 
-    /**
-     * Valider le mot de passe avec Keycloak
-     */
     private void validatePasswordWithKeycloak(String email, String password) {
         String tokenUrl = authServerUrl + "/realms/" + realm + "/protocol/openid-connect/token";
 
@@ -824,32 +888,28 @@ public class InternationalCompanyAuthService {
             throw new RuntimeException("Incorrect password");
         }
     }
-    // CHANGER LE MOT DE PASSE (SOCIÉTÉ INTERNATIONALE CONNECTÉE)
-// ========================================
+
+    // ========================================
+    // CHANGER LE MOT DE PASSE
+    // ========================================
     @Transactional
     public Map<String, Object> changePassword(String email, String oldPassword, String newPassword) {
 
-        // 1. Vérifier que l'utilisateur existe dans MySQL
         internationalcompany company = companyRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Company not found in database"));
 
-        // 2. Validation du nouveau mot de passe
         if (newPassword == null || newPassword.length() < 6) {
             throw new RuntimeException("Le nouveau mot de passe doit contenir au moins 6 caractères");
         }
 
         try {
-            // 3. Obtenir un token admin pour Keycloak
             String adminToken = getAdminToken();
-
-            // 4. Récupérer l'ID de l'utilisateur dans Keycloak
             String userId = getUserIdByEmail(email, adminToken);
 
             if (userId == null) {
                 throw new RuntimeException("Utilisateur non trouvé dans Keycloak");
             }
 
-            // 5. Valider l'ancien mot de passe avec Keycloak
             try {
                 validatePasswordWithKeycloak(email, oldPassword);
                 System.out.println("✅ Ancien mot de passe validé pour: " + email);
@@ -857,16 +917,13 @@ public class InternationalCompanyAuthService {
                 throw new RuntimeException("Ancien mot de passe incorrect");
             }
 
-            // 6. Mettre à jour le mot de passe dans Keycloak
             updatePasswordInKeycloak(userId, newPassword, adminToken);
             System.out.println("✅ Mot de passe mis à jour dans Keycloak pour: " + email);
 
-            // 7. Mettre à jour le mot de passe dans MySQL
             company.setPassword(newPassword);
             companyRepository.save(company);
             System.out.println("✅ Mot de passe mis à jour dans MySQL pour: " + email);
 
-            // 8. Préparer la réponse
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("message", "Mot de passe changé avec succès");
@@ -879,5 +936,4 @@ public class InternationalCompanyAuthService {
             throw new RuntimeException("Erreur lors du changement de mot de passe: " + e.getMessage());
         }
     }
-
 }

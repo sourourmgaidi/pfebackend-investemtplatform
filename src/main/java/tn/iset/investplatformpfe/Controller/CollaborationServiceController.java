@@ -1000,4 +1000,13 @@ public class CollaborationServiceController {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
+    @GetMapping("/by-status/{status}")
+    public ResponseEntity<?> getByStatus(@PathVariable String status) {
+        try {
+            ServiceStatus s = ServiceStatus.valueOf(status.toUpperCase());
+            return ResponseEntity.ok(service.getCollaborationServicesByStatus(s));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
 }

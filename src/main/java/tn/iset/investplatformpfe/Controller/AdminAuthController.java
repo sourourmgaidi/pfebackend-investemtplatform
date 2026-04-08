@@ -47,9 +47,54 @@ public class AdminAuthController {
 
         try {
             Map<String, Object> response = authService.login(email, password);
+
+            // ✅ EXTRAIRE LE RÔLE DEPUIS LE JWT ET DÉMARRER LA SESSION
+            String accessToken = (String) response.get("access_token");
+            if (accessToken != null) {
+                String role = extractRoleFromJwt(accessToken);
+                authService.startSessionAfterLogin(email, role);
+            }
+
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             return ResponseEntity.status(401).body(Map.of("error", "Authentification échouée: " + e.getMessage()));
+        }
+    }
+    private String extractRoleFromJwt(String token) {
+        try {
+            String[] parts = token.split("\\.");
+            if (parts.length < 2) return "USER";
+
+            String payload = new String(
+                    java.util.Base64.getUrlDecoder().decode(parts[1]),
+                    java.nio.charset.StandardCharsets.UTF_8
+            );
+
+            int realmAccessIndex = payload.indexOf("\"realm_access\"");
+            if (realmAccessIndex == -1) return "USER";
+
+            int rolesIndex = payload.indexOf("\"roles\"", realmAccessIndex);
+            if (rolesIndex == -1) return "USER";
+
+            int startBracket = payload.indexOf("[", rolesIndex);
+            int endBracket = payload.indexOf("]", startBracket);
+            if (startBracket == -1 || endBracket == -1) return "USER";
+
+            String rolesSection = payload.substring(startBracket + 1, endBracket);
+            String[] roleMatches = rolesSection.split(",");
+
+            for (String roleMatch : roleMatches) {
+                String cleanRole = roleMatch.trim().replaceAll("\"", "");
+                if (!cleanRole.startsWith("default-roles-") &&
+                        !cleanRole.equals("offline_access") &&
+                        !cleanRole.equals("uma_authorization")) {
+                    return cleanRole;
+                }
+            }
+            return "USER";
+        } catch (Exception e) {
+            System.err.println("Erreur extraction rôle admin: " + e.getMessage());
+            return "USER";
         }
     }
 
@@ -70,21 +115,82 @@ public class AdminAuthController {
     }
 
     @PostMapping("/logout")
-    public ResponseEntity<?> logout(@RequestBody Map<String, String> request) {
+    public ResponseEntity<?> logout(@AuthenticationPrincipal Jwt jwt,
+                                    @RequestBody Map<String, String> request) {
         String refreshToken = request.get("refreshToken");
 
         if (refreshToken == null) {
             return ResponseEntity.badRequest().body(Map.of("error", "Refresh token requis"));
         }
 
+        // 1. Email depuis le JWT header
+        String email = null;
+        if (jwt != null) {
+            email = jwt.getClaimAsString("email");
+            System.out.println("📧 Logout admin - Email depuis JWT: " + email);
+        }
+
+        // 2. Fallback : email depuis le body
+        if (email == null) {
+            email = request.get("email");
+            if (email != null) System.out.println("📧 Logout admin - Email depuis body: " + email);
+        }
+
+        // 3. ✅ NOUVEAU : extraire le sub du refreshToken → Keycloak → email
+        if (email == null) {
+            String sub = extractSubFromToken(refreshToken);
+            System.out.println("🔑 sub extrait du refreshToken admin: " + sub);
+            if (sub != null) {
+                email = authService.findEmailByKeycloakSub(sub);
+                System.out.println("📧 Email trouvé via Keycloak: " + email);
+            }
+        }
+
         try {
-            authService.logout(refreshToken);
+            if (email != null) {
+                authService.logoutWithEmail(refreshToken, email);
+            } else {
+                authService.logout(refreshToken);
+                System.out.println("⚠️ Logout admin sans email — session NON fermée");
+            }
             return ResponseEntity.ok(Map.of("message", "Déconnexion réussie"));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("error", "Déconnexion échouée: " + e.getMessage()));
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Déconnexion échouée: " + e.getMessage()));
         }
     }
 
+    // ✅ Extraire le "sub" depuis le refreshToken
+    private String extractSubFromToken(String token) {
+        try {
+            String[] parts = token.split("\\.");
+            if (parts.length < 2) return null;
+
+            String payload = parts[1];
+            int mod = payload.length() % 4;
+            if (mod != 0) payload += "=".repeat(4 - mod);
+
+            String decoded = new String(
+                    java.util.Base64.getUrlDecoder().decode(payload),
+                    java.nio.charset.StandardCharsets.UTF_8
+            );
+            System.out.println("🔍 Payload refreshToken admin décodé: " + decoded);
+
+            if (decoded.contains("\"sub\"")) {
+                int idx    = decoded.indexOf("\"sub\"");
+                int colon  = decoded.indexOf(":", idx);
+                int startQ = decoded.indexOf("\"", colon);
+                int endQ   = decoded.indexOf("\"", startQ + 1);
+                if (startQ != -1 && endQ != -1) {
+                    return decoded.substring(startQ + 1, endQ);
+                }
+            }
+            return null;
+        } catch (Exception e) {
+            System.err.println("⚠️ Erreur extraction sub admin: " + e.getMessage());
+            return null;
+        }
+    }
     @GetMapping("/profile")
     public ResponseEntity<?> getProfile(@AuthenticationPrincipal Jwt jwt) {
         if (jwt == null) {

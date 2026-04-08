@@ -54,7 +54,6 @@ public class InternationalCompanyAuthController {
     // ========================================
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody Map<String, String> credentials) {
-
         String email = credentials.get("email");
         String password = credentials.get("password");
 
@@ -66,6 +65,14 @@ public class InternationalCompanyAuthController {
 
         try {
             Map<String, Object> response = authService.login(email, password);
+
+            // ✅ EXTRAIRE LE RÔLE ET DÉMARRER LA SESSION
+            String accessToken = (String) response.get("access_token");
+            if (accessToken != null) {
+                String role = extractRoleFromJwt(accessToken);
+                authService.startSessionAfterLogin(email, role);
+            }
+
             return ResponseEntity.ok(response);
         } catch (Exception e) {
             return ResponseEntity.status(401).body(
@@ -73,7 +80,73 @@ public class InternationalCompanyAuthController {
             );
         }
     }
+    private String extractRoleFromJwt(String token) {
+        try {
+            String[] parts = token.split("\\.");
+            if (parts.length < 2) return "USER";
 
+            String payload = new String(
+                    java.util.Base64.getUrlDecoder().decode(parts[1]),
+                    java.nio.charset.StandardCharsets.UTF_8
+            );
+
+            int realmAccessIndex = payload.indexOf("\"realm_access\"");
+            if (realmAccessIndex == -1) return "USER";
+
+            int rolesIndex = payload.indexOf("\"roles\"", realmAccessIndex);
+            if (rolesIndex == -1) return "USER";
+
+            int startBracket = payload.indexOf("[", rolesIndex);
+            int endBracket = payload.indexOf("]", startBracket);
+            if (startBracket == -1 || endBracket == -1) return "USER";
+
+            String rolesSection = payload.substring(startBracket + 1, endBracket);
+            String[] roleMatches = rolesSection.split(",");
+
+            for (String roleMatch : roleMatches) {
+                String cleanRole = roleMatch.trim().replaceAll("\"", "");
+                if (!cleanRole.startsWith("default-roles-") &&
+                        !cleanRole.equals("offline_access") &&
+                        !cleanRole.equals("uma_authorization")) {
+                    return cleanRole;
+                }
+            }
+            return "USER";
+        } catch (Exception e) {
+            System.err.println("Erreur extraction rôle: " + e.getMessage());
+            return "USER";
+        }
+    }
+
+    private String extractSubFromToken(String token) {
+        try {
+            String[] parts = token.split("\\.");
+            if (parts.length < 2) return null;
+
+            String payload = parts[1];
+            int mod = payload.length() % 4;
+            if (mod != 0) payload += "=".repeat(4 - mod);
+
+            String decoded = new String(
+                    java.util.Base64.getUrlDecoder().decode(payload),
+                    java.nio.charset.StandardCharsets.UTF_8
+            );
+
+            if (decoded.contains("\"sub\"")) {
+                int idx    = decoded.indexOf("\"sub\"");
+                int colon  = decoded.indexOf(":", idx);
+                int startQ = decoded.indexOf("\"", colon);
+                int endQ   = decoded.indexOf("\"", startQ + 1);
+                if (startQ != -1 && endQ != -1) {
+                    return decoded.substring(startQ + 1, endQ);
+                }
+            }
+            return null;
+        } catch (Exception e) {
+            System.err.println("⚠️ Erreur extraction sub: " + e.getMessage());
+            return null;
+        }
+    }
     // ========================================
     // RAFRAÎCHIR LE TOKEN
     // ========================================
@@ -102,8 +175,8 @@ public class InternationalCompanyAuthController {
     // DÉCONNEXION
     // ========================================
     @PostMapping("/logout")
-    public ResponseEntity<?> logout(@RequestBody Map<String, String> request) {
-
+    public ResponseEntity<?> logout(@AuthenticationPrincipal Jwt jwt,
+                                    @RequestBody Map<String, String> request) {
         String refreshToken = request.get("refreshToken");
 
         if (refreshToken == null) {
@@ -112,8 +185,40 @@ public class InternationalCompanyAuthController {
             );
         }
 
+        // 1. Email depuis le JWT
+        String email = null;
+        if (jwt != null) {
+            email = jwt.getClaimAsString("email");
+            System.out.println("📧 Email depuis JWT: " + email);
+        }
+
+        // 2. Fallback : email depuis le body
+        if (email == null) {
+            email = request.get("email");
+            if (email != null) System.out.println("📧 Email depuis body: " + email);
+        }
+
+        // 3. Fallback : sub du refreshToken → Keycloak → email
+        if (email == null) {
+            String sub = extractSubFromToken(refreshToken);
+            System.out.println("🔑 sub extrait: " + sub);
+            if (sub != null) {
+                email = authService.findEmailByKeycloakSub(sub);
+                System.out.println("📧 Email trouvé via Keycloak: " + email);
+            }
+        }
+
         try {
             authService.logout(refreshToken);
+
+            // ✅ TERMINER LA SESSION
+            if (email != null) {
+                authService.endSession(email);
+                System.out.println("✅ Session terminée pour " + email);
+            } else {
+                System.out.println("⚠️ Email introuvable, session non terminée");
+            }
+
             return ResponseEntity.ok(Map.of("message", "Logout successful"));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(

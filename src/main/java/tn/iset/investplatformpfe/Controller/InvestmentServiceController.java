@@ -825,4 +825,53 @@ public class InvestmentServiceController {
     private boolean isServiceOwner(InvestmentService service, String email) {
         return service.getProvider() != null && service.getProvider().getEmail().equals(email);
     }
+
+
+    @GetMapping("/by-status/{status}")
+    public ResponseEntity<?> getByStatus(@PathVariable String status) {
+        try {
+            ServiceStatus s = ServiceStatus.valueOf(status.toUpperCase());
+            return ResponseEntity.ok(investmentService.getInvestmentServicesByStatus(s));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+    @GetMapping("/visible")
+    public ResponseEntity<?> getVisibleServices(
+            @RequestParam Long userId,
+            @RequestParam String userRole) {
+        try {
+            List<InvestmentService> approved = investmentService
+                    .getInvestmentServicesByStatus(ServiceStatus.APPROVED);
+
+            // Ajouter les services RESERVED/TAKEN qui appartiennent à ce user
+            List<InvestmentService> myTaken = investmentService
+                    .getServicesTakenByUser(userId, userRole);
+
+            List<InvestmentService> all = new java.util.ArrayList<>(approved);
+            myTaken.forEach(s -> {
+                if (all.stream().noneMatch(a -> a.getId().equals(s.getId()))) {
+                    all.add(s);
+                }
+            });
+
+            return ResponseEntity.ok(all);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/reserved")
+    public ResponseEntity<List<InvestmentService>> getReservedServices() {
+        return ResponseEntity.ok(investmentService.getInvestmentServicesByStatus(ServiceStatus.RESERVED));
+    }
+    @GetMapping("/available")
+    public ResponseEntity<List<InvestmentService>> getAvailableServices() {
+        List<InvestmentService> services = new java.util.ArrayList<>();
+        services.addAll(investmentService.getInvestmentServicesByStatus(ServiceStatus.APPROVED));
+        services.addAll(investmentService.getInvestmentServicesByStatus(ServiceStatus.PENDING_ACQUISITION));
+        services.addAll(investmentService.getInvestmentServicesByStatus(ServiceStatus.RESERVED));
+        return ResponseEntity.ok(services);
+    }
+
 }

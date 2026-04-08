@@ -32,6 +32,7 @@ public class InvestmentServiceService {
     private final ServiceRequestRepository serviceRequestRepository;
     private final AdminRepository adminRepository;
     private final FileStorageService fileStorageService;
+    private  final ServiceAcquisitionRepository serviceAcquisitionRepository;
 
     public InvestmentServiceService(
             InvestmentServiceRepository investmentRepository,
@@ -40,6 +41,7 @@ public class InvestmentServiceService {
             RegionRepository regionRepository,
             EconomicSectorRepository economicSectorRepository,
             NotificationService notificationService,
+            ServiceAcquisitionRepository serviceAcquisitionRepository,
 
             ServiceRequestRepository serviceRequestRepository,
             InvestmentServiceDocumentRepository documentRepository,
@@ -54,6 +56,7 @@ public class InvestmentServiceService {
         this.serviceRequestRepository = serviceRequestRepository;
         this.adminRepository = adminRepository;
         this.fileStorageService = fileStorageService;
+        this.serviceAcquisitionRepository=serviceAcquisitionRepository;
 
         log.info("✅ InvestmentServiceService initialisé");
     }
@@ -1526,5 +1529,19 @@ public class InvestmentServiceService {
             service.getFavoritedByCompanies().clear();
             log.info(" Favoris des sociétés nettoyés");
         }
+    }
+
+
+    public List<InvestmentService> getServicesTakenByUser(Long userId, String userRole) {
+        // Récupérer les acquisitions COMPLETED + AWAITING_PAYMENT de ce user
+        List<ServiceAcquisition> myAcquisitions = serviceAcquisitionRepository
+                .findByAcquirerIdAndRoleAndActiveStatuses(userId);
+
+        return myAcquisitions.stream()
+                .filter(a -> "INVESTMENT".equals(a.getServiceType()))
+                .map(a -> investmentRepository.findById(a.getServiceId()))
+                .filter(java.util.Optional::isPresent)
+                .map(java.util.Optional::get)
+                .collect(java.util.stream.Collectors.toList());
     }
 }

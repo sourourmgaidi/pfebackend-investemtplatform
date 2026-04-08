@@ -14,6 +14,9 @@ import java.util.List;
 public interface CollaborationServiceRepository extends JpaRepository<CollaborationService, Long> {
 
     List<CollaborationService> findByRegion(Region region);
+    long countByStatus(ServiceStatus status);
+    long countByRegionIdAndStatus(Long regionId, ServiceStatus status);
+    List<CollaborationService> findByRegionIdAndStatus(Long regionId, ServiceStatus status);
 
     List<CollaborationService> findByProvider(LocalPartner provider);
 
@@ -67,4 +70,14 @@ public interface CollaborationServiceRepository extends JpaRepository<Collaborat
     // ✅ Compter le nombre de partenaires économiques qui ont mis ce service en favori
     @Query("SELECT COUNT(ep) FROM EconomicPartner ep JOIN ep.favoriteCollaborationServices cs WHERE cs.id = :serviceId")
     long countPartnersByFavoriteService(@Param("serviceId") Long serviceId);
+
+    // ✅ NOUVELLE MÉTHODE POUR RÉCUPÉRER LES SERVICES AVEC PLUSIEURS STATUTS
+    @Query("SELECT c FROM CollaborationService c WHERE c.region.id = :regionId AND c.status IN :statuses")
+    List<CollaborationService> findByRegionIdAndStatusIn(@Param("regionId") Long regionId, @Param("statuses") List<ServiceStatus> statuses);
+
+    // ✅ NOUVELLE MÉTHODE POUR COMPTER AVEC PLUSIEURS STATUTS
+    @Query("SELECT COUNT(c) FROM CollaborationService c WHERE c.region.id = :regionId AND c.status IN :statuses")
+    long countByRegionIdAndStatusIn(@Param("regionId") Long regionId, @Param("statuses") List<ServiceStatus> statuses);
+
+
 }
