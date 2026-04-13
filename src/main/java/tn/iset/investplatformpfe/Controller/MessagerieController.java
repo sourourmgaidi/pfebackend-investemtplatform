@@ -490,4 +490,37 @@ public class MessagerieController {
         response.put("role", role);
         return ResponseEntity.ok(response);
     }
+    // ─────────────────────────────────────────────────────────────────────────
+// MARQUER UNE CONVERSATION COMME LUE (quand l'utilisateur l'ouvre)
+// ─────────────────────────────────────────────────────────────────────────
+
+    @PutMapping("/conversation/{otherEmail}/read")
+    public ResponseEntity<?> markConversationAsRead(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable String otherEmail) {
+
+        String myEmail = jwt.getClaimAsString("email");
+
+        try {
+            messagerieService.markConversationAsRead(myEmail, otherEmail);
+            return ResponseEntity.ok(Map.of("message", "Conversation marked as read"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+// COMPTER UNIQUEMENT LE NOMBRE DE MESSAGES NON LUS (sans les marquer)
+// ─────────────────────────────────────────────────────────────────────────
+
+    @GetMapping("/unread/count")
+    public ResponseEntity<?> getUnreadCount(@AuthenticationPrincipal Jwt jwt) {
+        if (jwt == null) {
+            return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
+        }
+
+        String email = jwt.getClaimAsString("email");
+        long count = messagerieService.countUnreadMessages(email);
+
+        return ResponseEntity.ok(Map.of("unreadCount", count));
+    }
 }

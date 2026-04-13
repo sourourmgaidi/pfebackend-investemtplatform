@@ -222,7 +222,6 @@ public class Investor {
         this.interestedInvestmentServices = interestedInvestmentServices;
     }
 
-    // ✅ NOUVEAUX GETTERS ET SETTERS pour favoriteServices
     public List<InvestmentService> getFavoriteServices() {
         return favoriteServices;
     }

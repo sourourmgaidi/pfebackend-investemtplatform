@@ -324,6 +324,29 @@ public class MessagerieService {
                         .findBySenderEmailAndRecipientEmail(otherEmail, myEmail)
                         .orElseThrow(() -> new RuntimeException("Conversation not found")));
 
+        // Récupérer tous les messages de la conversation
+        List<Message> messages = messageRepo.findByConversationOrderBySentDateAsc(conversation);
+
+        return messages;
+    }
+
+    // ========================================
+// MARQUER LES MESSAGES D'UNE CONVERSATION COMME LUS
+// (À appeler uniquement quand l'utilisateur ouvre la conversation)
+// ========================================
+    @Transactional
+    public void markConversationAsRead(String myEmail, String otherEmail) {
+
+        Conversation conversation = conversationRepo
+                .findBySenderEmailAndRecipientEmail(myEmail, otherEmail)
+                .orElseGet(() -> conversationRepo
+                        .findBySenderEmailAndRecipientEmail(otherEmail, myEmail)
+                        .orElse(null));
+
+        if (conversation == null) {
+            return; // Conversation n'existe pas
+        }
+
         // Marquer les messages comme lus
         if (conversation.getSenderEmail().equals(myEmail)) {
             messageRepo.markMessagesAsRead(myEmail, conversation);
@@ -334,12 +357,6 @@ public class MessagerieService {
         }
 
         conversationRepo.save(conversation);
-
-        // Récupérer tous les messages de la conversation
-        List<Message> messages = messageRepo.findByConversationOrderBySentDateAsc(conversation);
-
-        // Les attachments sont chargés automatiquement grâce à FetchType.EAGER
-        return messages;
     }
 
     // ========================================
