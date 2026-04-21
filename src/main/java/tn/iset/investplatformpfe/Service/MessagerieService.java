@@ -18,6 +18,7 @@ import java.util.stream.Collectors;
 @Service
 public class MessagerieService {
 
+    private final FlouciSubscriptionService flouciSubscriptionService;
     private final MessageRepository messageRepo;
     private final ConversationRepository conversationRepo;
     private final MessageAttachmentRepository attachmentRepository;
@@ -26,16 +27,22 @@ public class MessagerieService {
     private final LocalPartnerRepository localPartnerRepo;
     private final TouristRepository touristRepo;
     private final InternationalCompanyRepository internationalCompanyRepo;
+    private final ContactPaymentRepository contactPaymentRepository;
+    private final SubscriptionRepository subscriptionRepository;
+
 
     @Value("${file.upload-dir.messages:uploads/messages}")
     private String uploadDir;
     public MessagerieService(MessageRepository messageRepo,
+                             FlouciSubscriptionService flouciSubscriptionService,
+                             ContactPaymentRepository contactPaymentRepository,
                              ConversationRepository conversationRepo,
                              MessageAttachmentRepository attachmentRepository,
                              InvestorRepository investorRepo,
                              EconomicPartnerRepository partenaireEcoRepo,
                              LocalPartnerRepository localPartnerRepo,
                              TouristRepository touristRepo,
+                             SubscriptionRepository subscriptionRepository,
                              InternationalCompanyRepository internationalCompanyRepo) {
         this.messageRepo = messageRepo;
         this.conversationRepo = conversationRepo;
@@ -45,6 +52,9 @@ public class MessagerieService {
         this.localPartnerRepo = localPartnerRepo;
         this.touristRepo = touristRepo;
         this.internationalCompanyRepo = internationalCompanyRepo;
+        this.contactPaymentRepository = contactPaymentRepository;
+        this.subscriptionRepository=subscriptionRepository;
+        this.flouciSubscriptionService = flouciSubscriptionService;
     }
 
     // ========================================
@@ -54,10 +64,22 @@ public class MessagerieService {
     public Message sendMessage(String senderEmail, String recipientEmail,
                                String content, String senderRole) {
 
+        // ========================================
+        // 🔥 BLOQUER L'ENVOI SI DESTINATAIRE EST LOCAL_PARTNER SANS ABONNEMENT ACTIF
+        // ========================================
+        if (localPartnerRepo.findByEmail(recipientEmail).isPresent()) {
+            boolean hasActiveSub = subscriptionRepository.hasActiveSubscription(
+                    senderEmail, LocalDateTime.now());
+
+            if (!hasActiveSub) {
+                throw new RuntimeException("Vous devez avoir un abonnement actif (40 TND/mois) pour contacter un Local Partner");
+            }
+        }
+        // ========================================
+
         // 1. Trouver ou créer la conversation
         Conversation conversation = findOrCreateConversation(senderEmail, recipientEmail, senderRole);
 
-        // Forcer la sauvegarde si nouvellement créée
         if (conversation.getId() == null) {
             conversation = conversationRepo.saveAndFlush(conversation);
         }
@@ -79,7 +101,6 @@ public class MessagerieService {
 
         return savedMessage;
     }
-
     // ========================================
     // ENVOYER UN MESSAGE AVEC PIÈCES JOINTES
     // ========================================
@@ -498,5 +519,103 @@ public class MessagerieService {
         if (touristRepo.findByEmail(email).isPresent()) return "TOURIST";
         if (internationalCompanyRepo.findByEmail(email).isPresent()) return "INTERNATIONAL_COMPANY";
         return "UNKNOWN";
+    }
+
+    // ========================================
+// MÉTHODES POUR PAIEMENT LOCAL PARTNER
+// ========================================
+
+
+
+// ========================================
+// MÉTHODES POUR ABONNEMENT MENSUEL
+// ========================================
+
+    /**
+     * Vérifier si un utilisateur a un abonnement actif
+     */
+    public Map<String, Object> checkSubscription(String userEmail) {
+        Optional<Subscription> active = subscriptionRepository
+                .findActiveSubscription(userEmail, LocalDateTime.now());
+
+        if (active.isPresent()) {
+            Subscription sub = active.get();
+            long daysRemaining = java.time.temporal.ChronoUnit.DAYS
+                    .between(LocalDateTime.now(), sub.getExpiresAt());
+            return Map.of(
+                    "hasActiveSubscription", true,
+                    "expiresAt", sub.getExpiresAt().toString(),
+                    "daysRemaining", daysRemaining
+            );
+        }
+
+        return Map.of(
+                "hasActiveSubscription", false,
+                "requiresPayment", true,
+                "amount", 40,
+                "currency", "TND"
+        );
+    }
+
+    /**
+     * Créer une session de paiement d'abonnement
+     */
+    @Transactional
+    public Subscription createSubscriptionSession(String subscriberEmail) {
+        String paymentId = "SUB_" + System.currentTimeMillis() + "_" +
+                UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+
+        Subscription sub = Subscription.builder()
+                .paymentId(paymentId)
+                .subscriberEmail(subscriberEmail)
+                .amount(40.0)
+                .currency("TND")
+                .status(PaymentStatus.PENDING)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        return subscriptionRepository.save(sub);
+    }
+
+    /**
+     * Confirmer le paiement et activer l'abonnement pour 1 mois
+     */
+    @Transactional
+    public Map<String, Object> confirmSubscriptionPayment(String paymentId,
+                                                          String transactionId,
+                                                          String flouciPaymentId) {
+        Subscription sub = subscriptionRepository.findByPaymentId(paymentId)
+                .orElseThrow(() -> new RuntimeException("Abonnement non trouvé"));
+
+        if (sub.getStatus() != PaymentStatus.PENDING) {
+            throw new RuntimeException("Paiement déjà traité");
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        sub.setStatus(PaymentStatus.COMPLETED);
+        sub.setPaidAt(now);
+        sub.setExpiresAt(now.plusMonths(1));   // ← 1 mois d'accès
+        sub.setTransactionId(transactionId);
+        sub.setFlouciPaymentId(flouciPaymentId);
+        subscriptionRepository.save(sub);
+
+        return Map.of(
+                "success", true,
+                "subscriberEmail", sub.getSubscriberEmail(),
+                "expiresAt", sub.getExpiresAt().toString(),
+                "daysRemaining", 30
+        );
+    }
+
+    /**
+     * Marquer un abonnement comme échoué
+     */
+    public void markSubscriptionFailed(String paymentId) {
+        subscriptionRepository.findByPaymentId(paymentId).ifPresent(sub -> {
+            if (sub.getStatus() == PaymentStatus.PENDING) {
+                sub.setStatus(PaymentStatus.FAILED);
+                subscriptionRepository.save(sub);
+            }
+        });
     }
 }

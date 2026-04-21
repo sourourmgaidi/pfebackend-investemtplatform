@@ -9,9 +9,9 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
-import tn.iset.investplatformpfe.Entity.Message;
-import tn.iset.investplatformpfe.Entity.MessageAttachment;
-import tn.iset.investplatformpfe.Entity.Conversation;
+import tn.iset.investplatformpfe.Entity.*;
+import tn.iset.investplatformpfe.Service.FlouciService;
+import tn.iset.investplatformpfe.Service.FlouciSubscriptionService;
 import tn.iset.investplatformpfe.Service.MessagerieService;
 
 import java.io.IOException;
@@ -26,9 +26,19 @@ import java.util.HashMap;
 public class MessagerieController {
 
     private final MessagerieService messagerieService;
+    private final FlouciService flouciService;
+    private final FlouciSubscriptionService flouciSubscriptionService;
 
-    public MessagerieController(MessagerieService messagerieService) {
+
+
+    public MessagerieController(MessagerieService messagerieService,
+                                FlouciService flouciService,
+                                FlouciSubscriptionService flouciSubscriptionService) {
         this.messagerieService = messagerieService;
+        this.flouciService = flouciService;
+        this.flouciSubscriptionService = flouciSubscriptionService;
+
+
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -523,4 +533,99 @@ public class MessagerieController {
 
         return ResponseEntity.ok(Map.of("unreadCount", count));
     }
+    // ========================================
+// ENDPOINTS CONTACT LOCAL PARTNER AVEC PAIEMENT
+// ========================================
+
+
+    // ========================================
+// ENDPOINTS ABONNEMENT MENSUEL
+// ========================================
+
+    /**
+     * 1. Vérifier l'abonnement actif
+     */
+    @GetMapping("/subscription/check")
+    public ResponseEntity<?> checkSubscription(@AuthenticationPrincipal Jwt jwt) {
+        String userEmail = jwt.getClaimAsString("email");
+        String role = getRole(jwt);
+
+        if ("LOCAL_PARTNER".equals(role)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Action non autorisée"));
+        }
+
+        return ResponseEntity.ok(messagerieService.checkSubscription(userEmail));
+    }
+
+    /**
+     * 2. Initier le paiement de l'abonnement mensuel
+     */
+    @PostMapping("/subscription/subscribe")
+    public ResponseEntity<?> initiateSubscription(@AuthenticationPrincipal Jwt jwt) {
+        String userEmail = jwt.getClaimAsString("email");
+        String role = getRole(jwt);
+
+        if ("LOCAL_PARTNER".equals(role)) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Action non autorisée"));
+        }
+
+        try {
+            Subscription sub = messagerieService.createSubscriptionSession(userEmail);
+
+            // ✅ Utiliser le nouveau service d'abonnement
+            Map<String, Object> flouciResponse = flouciSubscriptionService.initiateSubscriptionPayment(40.0, sub.getPaymentId());
+
+            String paymentUrl = null;
+            if (flouciResponse.containsKey("result")) {
+                Map<String, Object> result = (Map<String, Object>) flouciResponse.get("result");
+                paymentUrl = (String) result.get("link");
+            }
+
+            return ResponseEntity.ok(Map.of(
+                    "paymentId", sub.getPaymentId(),
+                    "paymentUrl", paymentUrl,
+                    "amount", 40,
+                    "description", "Abonnement mensuel — accès illimité aux Local Partners"
+            ));
+
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
+    /**
+     * 3. Callback après paiement réussi
+     */
+    @GetMapping("/subscription/payment-success")
+    public ResponseEntity<?> subscriptionPaymentSuccess(
+            @RequestParam String paymentId,
+            @RequestParam(required = false) String transaction_id) {
+
+        try {
+            // ✅ Utiliser le nouveau service d'abonnement
+            Map<String, Object> verification = flouciSubscriptionService.verifySubscriptionPayment(paymentId);
+
+            boolean paymentSuccess = false;
+            if (verification.containsKey("result")) {
+                Map<String, Object> result = (Map<String, Object>) verification.get("result");
+                String status = (String) result.get("status");
+                paymentSuccess = "SUCCESS".equals(status);
+            } else if (verification.containsKey("simulated")) {
+                paymentSuccess = true;
+            }
+
+            if (paymentSuccess) {
+                Map<String, Object> info = messagerieService.confirmSubscriptionPayment(
+                        paymentId, transaction_id, paymentId);
+                return ResponseEntity.ok(info);
+            } else {
+                messagerieService.markSubscriptionFailed(paymentId);
+                return ResponseEntity.badRequest()
+                        .body(Map.of("success", false, "error", "Paiement échoué"));
+            }
+
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
+
 }

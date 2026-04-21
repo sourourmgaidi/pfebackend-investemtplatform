@@ -60,6 +60,7 @@ public class SecurityConfig {
     public SecurityFilterChain publicAuthFilterChain(HttpSecurity http) throws Exception {
         http
                 .securityMatcher(
+                        "/realms/**",
                         "/api/acquisitions/confirm",
                         "/api/investment-services/by-status/**",
                         "/api/collaboration-services/by-status/**",
@@ -196,7 +197,8 @@ public class SecurityConfig {
         configuration.setAllowedOrigins(Arrays.asList(
                 "http://localhost:4200",
                 "http://127.0.0.1:4200",
-                "http://localhost:4201"
+                "http://localhost:4201",
+                "https://abc123-def456.ngrok-free.dev"
         ));
 
         // Méthodes HTTP autorisées
