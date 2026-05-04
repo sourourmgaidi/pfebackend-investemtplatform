@@ -8,9 +8,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 import tn.iset.investplatformpfe.Entity.LocalPartner;
 import tn.iset.investplatformpfe.Entity.Role;
-import tn.iset.investplatformpfe.Repository.InvestorRepository;
-import tn.iset.investplatformpfe.Repository.InternationalCompanyRepository;
-import tn.iset.investplatformpfe.Repository.LocalPartnerRepository;
+import tn.iset.investplatformpfe.Repository.*;
 import tn.iset.investplatformpfe.Service.ServiceAcquisitionService;
 
 import java.util.List;
@@ -27,19 +25,29 @@ public class ServiceAcquisitionController {
     private final LocalPartnerRepository localPartnerRepository;
     private final InvestorRepository investorRepository;
     private final InternationalCompanyRepository internationalCompanyRepository;
+    private final EconomicPartnerRepository economicPartnerRepository;
+    private final TouristRepository touristRepository;
+
 
     public ServiceAcquisitionController(
             ServiceAcquisitionService acquisitionService,
             LocalPartnerRepository localPartnerRepository,
             InvestorRepository investorRepository,
-            InternationalCompanyRepository internationalCompanyRepository) {
+            InternationalCompanyRepository internationalCompanyRepository,
+            EconomicPartnerRepository economicPartnerRepository,
+            TouristRepository touristRepository) {
         this.acquisitionService = acquisitionService;
         this.localPartnerRepository = localPartnerRepository;
         this.investorRepository = investorRepository;
         this.internationalCompanyRepository = internationalCompanyRepository;
+        this.economicPartnerRepository = economicPartnerRepository;
+        this.touristRepository = touristRepository;
+
     }
 
-    // ✅ Helper — extraire le LocalPartner depuis le JWT
+    // ─────────────────────────────────────────
+    // Helpers
+    // ─────────────────────────────────────────
     private LocalPartner getAuthenticatedPartner(Jwt jwt) {
         if (jwt == null) throw new RuntimeException("Not authenticated");
         String email = jwt.getClaimAsString("email");
@@ -47,14 +55,16 @@ public class ServiceAcquisitionController {
                 .orElseThrow(() -> new RuntimeException("Local partner not found for email: " + email));
     }
 
-    // ✅ Helper — extraire le rôle depuis le JWT
     private String extractRoleFromJwt(Jwt jwt) {
         Map<String, Object> realmAccess = jwt.getClaimAsMap("realm_access");
         if (realmAccess != null) {
             List<String> roles = (List<String>) realmAccess.get("roles");
             if (roles != null) {
                 for (String role : roles) {
-                    if (role.equals("INVESTOR") || role.equals("INTERNATIONAL_COMPANY")) {
+                    if (role.equals("INVESTOR")
+                            || role.equals("INTERNATIONAL_COMPANY")
+                            || role.equals("PARTNER")
+                            || role.equals("TOURIST")) {  // ← ajout
                         return role;
                     }
                 }
@@ -63,7 +73,6 @@ public class ServiceAcquisitionController {
         throw new RuntimeException("No valid role found");
     }
 
-    // ✅ Helper — récupérer l'ID depuis l'email et le rôle
     private Long getUserIdByEmailAndRole(String email, String role) {
         if ("INVESTOR".equals(role)) {
             return investorRepository.findByEmail(email)
@@ -71,31 +80,33 @@ public class ServiceAcquisitionController {
         } else if ("INTERNATIONAL_COMPANY".equals(role)) {
             return internationalCompanyRepository.findByEmail(email)
                     .orElseThrow(() -> new RuntimeException("International company not found")).getId();
+        } else if ("PARTNER".equals(role)) {
+            return economicPartnerRepository.findByEmail(email)
+                    .orElseThrow(() -> new RuntimeException("Economic partner not found")).getId();
+        } else if ("TOURIST".equals(role)) {  // ← ajout
+            return touristRepository.findByEmail(email)
+                    .orElseThrow(() -> new RuntimeException("Tourist not found")).getId();
         }
         throw new RuntimeException("Unknown role");
     }
 
     // ─────────────────────────────────────────
-    // ✅ Investor/InternationalCompany envoie une demande — JWT obligatoire
+    // ÉTAPE 1 — User envoie une demande
     // ─────────────────────────────────────────
     @PostMapping("/initiate")
     public ResponseEntity<?> initiate(
             @AuthenticationPrincipal Jwt jwt,
             @RequestBody Map<String, Object> body) {
         try {
-            // 1. Vérifier JWT
-            if (jwt == null) {
+            if (jwt == null)
                 return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
-            }
 
             log.info("📥 Body reçu: {}", body);
 
-            // 2. Extraire les infos du JWT (sécurisé)
             String emailFromToken = jwt.getClaimAsString("email");
-            String roleFromToken = extractRoleFromJwt(jwt);
-            Long idFromToken = getUserIdByEmailAndRole(emailFromToken, roleFromToken);
+            String roleFromToken  = extractRoleFromJwt(jwt);
+            Long   idFromToken    = getUserIdByEmailAndRole(emailFromToken, roleFromToken);
 
-            // 3. Valider les champs (sans acquirerId, email, role)
             if (body.get("serviceType") == null)
                 return ResponseEntity.badRequest().body(Map.of("error", "serviceType is required"));
             if (body.get("serviceId") == null)
@@ -104,23 +115,19 @@ public class ServiceAcquisitionController {
                 return ResponseEntity.badRequest().body(Map.of("error", "amount is required"));
 
             String serviceType = (String) body.get("serviceType");
-            Long serviceId = Long.valueOf(body.get("serviceId").toString());
-            double amount = Double.parseDouble(body.get("amount").toString());
+            Long   serviceId   = Long.valueOf(body.get("serviceId").toString());
+            double amount      = Double.parseDouble(body.get("amount").toString());
 
-            // 4. Vérifier le rôle
             Role role = Role.valueOf(roleFromToken);
-            if (role != Role.INVESTOR && role != Role.INTERNATIONAL_COMPANY) {
-                return ResponseEntity.status(403).body(
-                        Map.of("error", "Only INVESTOR and INTERNATIONAL_COMPANY roles can acquire services."));
+            if (role != Role.INVESTOR
+                    && role != Role.INTERNATIONAL_COMPANY
+                    && role != Role.PARTNER) {
+                return ResponseEntity.status(403).body(Map.of(
+                        "error", "Only INVESTOR, INTERNATIONAL_COMPANY and ECONOMIC_PARTNER roles can acquire services."));
             }
 
-            // 5. Appeler le service AVEC les valeurs du JWT (pas celles du body)
             Map<String, Object> result = acquisitionService.initiateAcquisition(
-                    serviceType, serviceId,
-                    idFromToken,      // ← FORCÉ depuis JWT
-                    emailFromToken,   // ← FORCÉ depuis JWT
-                    role,             // ← FORCÉ depuis JWT
-                    amount);
+                    serviceType, serviceId, idFromToken, emailFromToken, role, amount);
 
             return ResponseEntity.ok(result);
 
@@ -131,7 +138,7 @@ public class ServiceAcquisitionController {
     }
 
     // ─────────────────────────────────────────
-    // ✅ Local Partner voit ses demandes en attente — JWT obligatoire
+    // ÉTAPE 2A — Local Partner voit les demandes en attente
     // ─────────────────────────────────────────
     @GetMapping("/partner/pending")
     public ResponseEntity<?> partnerPending(@AuthenticationPrincipal Jwt jwt) {
@@ -145,7 +152,8 @@ public class ServiceAcquisitionController {
     }
 
     // ─────────────────────────────────────────
-    // ✅ Local Partner ACCEPTE — JWT obligatoire
+    // ÉTAPE 2A — Local Partner APPROUVE la demande
+    // → Service passe en RESERVED, user notifié pour payer
     // ─────────────────────────────────────────
     @PostMapping("/partner/approve/{acquisitionId}")
     public ResponseEntity<?> approve(
@@ -161,7 +169,7 @@ public class ServiceAcquisitionController {
     }
 
     // ─────────────────────────────────────────
-    // ✅ Local Partner REFUSE — JWT obligatoire
+    // ÉTAPE 2B — Local Partner REFUSE la demande
     // ─────────────────────────────────────────
     @PostMapping("/partner/reject/{acquisitionId}")
     public ResponseEntity<?> reject(
@@ -181,47 +189,53 @@ public class ServiceAcquisitionController {
     }
 
     // ─────────────────────────────────────────
-    // Confirmer paiement après Flouci
+    // ÉTAPE 3 — Local Partner voit les demandes en attente de validation
+    //           (paiement effectué hors ligne, partner doit confirmer)
     // ─────────────────────────────────────────
-    @GetMapping("/confirm")
-    public ResponseEntity<?> confirm(
-            @RequestParam(required = false) String paymentId,
-            @RequestParam(required = false) String orderId) {
+    @GetMapping("/partner/awaiting-validation")
+    public ResponseEntity<?> partnerAwaitingValidation(@AuthenticationPrincipal Jwt jwt) {
         try {
-            return ResponseEntity.ok(acquisitionService.confirmPayment(paymentId, orderId));
+            LocalPartner partner = getAuthenticatedPartner(jwt);
+            return ResponseEntity.ok(
+                    acquisitionService.getAwaitingValidationForPartner(partner.getId()));
+        } catch (Exception e) {
+            return ResponseEntity.status(401).body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    // ─────────────────────────────────────────
+    // ÉTAPE 3 — Local Partner VALIDE (confirme réception du paiement)
+    //           → Service passe en TAKEN, acquisition COMPLETED
+    // ─────────────────────────────────────────
+    @PostMapping("/partner/validate/{acquisitionId}")
+    public ResponseEntity<?> validate(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable Long acquisitionId) {
+        try {
+            LocalPartner partner = getAuthenticatedPartner(jwt);
+            return ResponseEntity.ok(
+                    acquisitionService.partnerValidate(acquisitionId, partner.getId()));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 
     // ─────────────────────────────────────────
-    // Annuler
-    // ─────────────────────────────────────────
-    @GetMapping("/cancel")
-    public ResponseEntity<?> cancel(
-            @RequestParam(required = false) String paymentId,
-            @RequestParam(required = false) String orderId) {
-        acquisitionService.cancelPayment(paymentId, orderId);
-        return ResponseEntity.ok(Map.of("message", "Payment cancelled"));
-    }
-
-    // ─────────────────────────────────────────
-    // ✅ Services acquis par l'utilisateur connecté — JWT obligatoire
+    // Services acquis (COMPLETED) par l'utilisateur connecté
     // ─────────────────────────────────────────
     @GetMapping("/my-services")
     public ResponseEntity<?> myServices(@AuthenticationPrincipal Jwt jwt) {
         try {
-            if (jwt == null) {
+            if (jwt == null)
                 return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
-            }
 
-            String email = jwt.getClaimAsString("email");
+            String email         = jwt.getClaimAsString("email");
             String roleFromToken = extractRoleFromJwt(jwt);
-            Long userId = getUserIdByEmailAndRole(email, roleFromToken);
+            Long   userId        = getUserIdByEmailAndRole(email, roleFromToken);
 
             log.info("📋 /my-services - userId={}, role={}", userId, roleFromToken);
-            Role roleEnum = Role.valueOf(roleFromToken);
-            var acquisitions = acquisitionService.getUserAcquisitions(userId, roleEnum);
+            Role roleEnum    = Role.valueOf(roleFromToken);
+            var  acquisitions = acquisitionService.getUserAcquisitions(userId, roleEnum);
             log.info("✅ {} acquisitions retournées", acquisitions.size());
             return ResponseEntity.ok(acquisitions);
 
@@ -232,88 +246,17 @@ public class ServiceAcquisitionController {
     }
 
     // ─────────────────────────────────────────
-    // Vérifier si un service est déjà pris
-    // ─────────────────────────────────────────
-    @GetMapping("/check")
-    public ResponseEntity<?> check(
-            @RequestParam Long serviceId,
-            @RequestParam String serviceType) {
-        return ResponseEntity.ok(Map.of("taken",
-                acquisitionService.isServiceTaken(serviceId, serviceType)));
-    }
-
-    /**
-     * GET /api/acquisitions/access/user?serviceId=1&serviceType=INVESTMENT&userId=5
-     * Vérifier si un user a accès à un service TAKEN
-     */
-    @GetMapping("/access/user")
-    public ResponseEntity<?> checkUserAccess(
-            @RequestParam Long serviceId,
-            @RequestParam String serviceType,
-            @RequestParam Long userId) {
-        return ResponseEntity.ok(Map.of("hasAccess",
-                acquisitionService.userHasAccess(serviceId, serviceType, userId)));
-    }
-
-    /**
-     * GET /api/acquisitions/access/partner?serviceId=1&serviceType=INVESTMENT&partnerId=2
-     * Vérifier si un partner a accès à un service TAKEN (son propre service)
-     */
-    @GetMapping("/access/partner")
-    public ResponseEntity<?> checkPartnerAccess(
-            @RequestParam Long serviceId,
-            @RequestParam String serviceType,
-            @RequestParam Long partnerId) {
-        return ResponseEntity.ok(Map.of("hasAccess",
-                acquisitionService.partnerHasAccess(serviceId, serviceType, partnerId)));
-    }
-
-    // ─────────────────────────────────────────
-    // ✅ User annule sa demande — JWT obligatoire
-    // ─────────────────────────────────────────
-    @PostMapping("/cancel-request/{acquisitionId}")
-    public ResponseEntity<?> cancelRequest(
-            @AuthenticationPrincipal Jwt jwt,
-            @PathVariable Long acquisitionId,
-            @RequestBody Map<String, String> body) {
-        try {
-            if (jwt == null) {
-                return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
-            }
-
-            String email = jwt.getClaimAsString("email");
-            String roleFromToken = extractRoleFromJwt(jwt);
-            Long userId = getUserIdByEmailAndRole(email, roleFromToken);
-
-            String reason = body.get("reason");
-            if (reason == null || reason.isBlank()) {
-                return ResponseEntity.badRequest().body(Map.of("error", "Reason is required"));
-            }
-
-            // userId est forcé depuis le JWT, pas depuis le body !
-            Map<String, Object> result = acquisitionService.cancelUserRequest(
-                    acquisitionId, userId, reason);
-            return ResponseEntity.ok(result);
-
-        } catch (Exception e) {
-            log.error("❌ Erreur annulation demande: {}", e.getMessage(), e);
-            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
-        }
-    }
-
-    // ─────────────────────────────────────────
-    // ✅ Toutes les acquisitions de l'utilisateur connecté — JWT obligatoire
+    // Toutes les acquisitions (tous statuts) de l'utilisateur connecté
     // ─────────────────────────────────────────
     @GetMapping("/my-all")
     public ResponseEntity<?> myAllAcquisitions(@AuthenticationPrincipal Jwt jwt) {
         try {
-            if (jwt == null) {
+            if (jwt == null)
                 return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
-            }
 
-            String email = jwt.getClaimAsString("email");
+            String email         = jwt.getClaimAsString("email");
             String roleFromToken = extractRoleFromJwt(jwt);
-            Long userId = getUserIdByEmailAndRole(email, roleFromToken);
+            Long   userId        = getUserIdByEmailAndRole(email, roleFromToken);
 
             return ResponseEntity.ok(
                     acquisitionService.getAllUserAcquisitions(userId, Role.valueOf(roleFromToken)));
@@ -325,7 +268,65 @@ public class ServiceAcquisitionController {
     }
 
     // ─────────────────────────────────────────
-    // ⚠️ DELETE - Gardé tel quel (admin seulement)
+    // User annule sa propre demande
+    // ─────────────────────────────────────────
+    @PostMapping("/cancel-request/{acquisitionId}")
+    public ResponseEntity<?> cancelRequest(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable Long acquisitionId,
+            @RequestBody Map<String, String> body) {
+        try {
+            if (jwt == null)
+                return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
+
+            String email         = jwt.getClaimAsString("email");
+            String roleFromToken = extractRoleFromJwt(jwt);
+            Long   userId        = getUserIdByEmailAndRole(email, roleFromToken);
+
+            String reason = body.get("reason");
+            if (reason == null || reason.isBlank())
+                return ResponseEntity.badRequest().body(Map.of("error", "Reason is required"));
+
+            return ResponseEntity.ok(
+                    acquisitionService.cancelUserRequest(acquisitionId, userId, reason));
+
+        } catch (Exception e) {
+            log.error("❌ Erreur annulation demande: {}", e.getMessage(), e);
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    // ─────────────────────────────────────────
+    // Vérifications d'accès / statut
+    // ─────────────────────────────────────────
+    @GetMapping("/check")
+    public ResponseEntity<?> check(
+            @RequestParam Long serviceId,
+            @RequestParam String serviceType) {
+        return ResponseEntity.ok(Map.of("taken",
+                acquisitionService.isServiceTaken(serviceId, serviceType)));
+    }
+
+    @GetMapping("/access/user")
+    public ResponseEntity<?> checkUserAccess(
+            @RequestParam Long serviceId,
+            @RequestParam String serviceType,
+            @RequestParam Long userId) {
+        return ResponseEntity.ok(Map.of("hasAccess",
+                acquisitionService.userHasAccess(serviceId, serviceType, userId)));
+    }
+
+    @GetMapping("/access/partner")
+    public ResponseEntity<?> checkPartnerAccess(
+            @RequestParam Long serviceId,
+            @RequestParam String serviceType,
+            @RequestParam Long partnerId) {
+        return ResponseEntity.ok(Map.of("hasAccess",
+                acquisitionService.partnerHasAccess(serviceId, serviceType, partnerId)));
+    }
+
+    // ─────────────────────────────────────────
+    // Admin — suppression
     // ─────────────────────────────────────────
     @DeleteMapping("/{acquisitionId}")
     public ResponseEntity<?> deleteAcquisition(
@@ -335,6 +336,82 @@ public class ServiceAcquisitionController {
             acquisitionService.deleteAcquisition(acquisitionId);
             return ResponseEntity.ok(Map.of("message", "Acquisition deleted."));
         } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+    @PostMapping("/tourist/initiate")
+    public ResponseEntity<?> touristInitiate(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestBody Map<String, Object> body) {
+        try {
+            if (jwt == null)
+                return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
+
+            String email = jwt.getClaimAsString("email");
+
+            // Vérifier que c'est bien un TOURIST
+            Map<String, Object> realmAccess = jwt.getClaimAsMap("realm_access");
+            List<String> roles = (List<String>) realmAccess.get("roles");
+            if (roles == null || !roles.contains("TOURIST"))
+                return ResponseEntity.status(403).body(Map.of("error", "Only tourists can access this endpoint"));
+
+            Long touristId = touristRepository.findByEmail(email)
+                    .orElseThrow(() -> new RuntimeException("Tourist not found")).getId();
+
+            if (body.get("serviceId") == null)
+                return ResponseEntity.badRequest().body(Map.of("error", "serviceId is required"));
+            if (body.get("amount") == null)
+                return ResponseEntity.badRequest().body(Map.of("error", "amount is required"));
+
+            Long serviceId = Long.valueOf(body.get("serviceId").toString());
+            double amount  = Double.parseDouble(body.get("amount").toString());
+
+            Map<String, Object> result = acquisitionService.initiateAcquisition(
+                    "TOURIST", serviceId, touristId, email, Role.TOURIST, amount);
+
+            return ResponseEntity.ok(result);
+
+        } catch (Exception e) {
+            log.error("❌ Erreur initiation touriste: {}", e.getMessage(), e);
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+    // Services acquis (COMPLETED) par le touriste connecté
+    @GetMapping("/tourist/my-services")
+    public ResponseEntity<?> touristMyServices(@AuthenticationPrincipal Jwt jwt) {
+        try {
+            if (jwt == null)
+                return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
+
+            String email = jwt.getClaimAsString("email");
+            Long touristId = touristRepository.findByEmail(email)
+                    .orElseThrow(() -> new RuntimeException("Tourist not found")).getId();
+
+            return ResponseEntity.ok(
+                    acquisitionService.getUserAcquisitions(touristId, Role.TOURIST));
+
+        } catch (Exception e) {
+            log.error("❌ Erreur tourist/my-services: {}", e.getMessage(), e);
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    // Toutes les acquisitions (tous statuts) du touriste connecté
+    @GetMapping("/tourist/my-all")
+    public ResponseEntity<?> touristMyAll(@AuthenticationPrincipal Jwt jwt) {
+        try {
+            if (jwt == null)
+                return ResponseEntity.status(401).body(Map.of("error", "Not authenticated"));
+
+            String email = jwt.getClaimAsString("email");
+            Long touristId = touristRepository.findByEmail(email)
+                    .orElseThrow(() -> new RuntimeException("Tourist not found")).getId();
+
+            return ResponseEntity.ok(
+                    acquisitionService.getAllUserAcquisitions(touristId, Role.TOURIST));
+
+        } catch (Exception e) {
+            log.error("❌ Erreur tourist/my-all: {}", e.getMessage(), e);
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }

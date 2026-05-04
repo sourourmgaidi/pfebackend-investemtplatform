@@ -128,14 +128,21 @@ public class LocalPartnerAuthService {
             throw new RuntimeException("All required fields must be filled");
         }
 
-        // ✅ VALIDATION GMAIL
+
         if (!isGmail(email)) {
             throw new RuntimeException("Only Gmail addresses are allowed. Please use a valid Gmail address (e.g., @gmail.com, @gmail.fr, etc.)");
         }
 
-        // ✅ VÉRIFIER L'EMAIL DANS TOUTES LES TABLES
+
         if (isEmailAlreadyUsed(email)) {
             throw new RuntimeException("This email is already in use. Please use a different email address.");
+        }
+        if (userData.containsKey("numeroRegistreCommerce") && userData.get("numeroRegistreCommerce") != null) {
+            validateBusinessRegistrationNumber((String) userData.get("numeroRegistreCommerce"));
+        }
+
+        if (userData.containsKey("taxeProfessionnelle") && userData.get("taxeProfessionnelle") != null) {
+            validateProfessionalTaxNumber((String) userData.get("taxeProfessionnelle"));
         }
 
         try {
@@ -390,6 +397,26 @@ public class LocalPartnerAuthService {
                 throw new RuntimeException("User not found in Keycloak");
             }
 
+            // ========================================
+            // ✅ VALIDATIONS AJOUTÉES
+            // ========================================
+
+            // Validation Business Registration Number
+            if (userData.containsKey("numeroRegistreCommerce")) {
+                String numero = (String) userData.get("numeroRegistreCommerce");
+                if (numero != null && !numero.trim().isEmpty()) {
+                    validateBusinessRegistrationNumber(numero);
+                }
+            }
+
+            // Validation Professional Tax Number
+            if (userData.containsKey("taxeProfessionnelle")) {
+                String taxe = (String) userData.get("taxeProfessionnelle");
+                if (taxe != null && !taxe.trim().isEmpty()) {
+                    validateProfessionalTaxNumber(taxe);
+                }
+            }
+
             Map<String, Object> keycloakUpdates = new HashMap<>();
             boolean emailChanged = false;
             String newEmail = null;
@@ -416,7 +443,6 @@ public class LocalPartnerAuthService {
                     if (!isGmail(newEmail)) {
                         throw new RuntimeException("The new email must be a valid Gmail address");
                     }
-                    // ✅ Vérifier dans TOUTES les tables
                     if (isEmailAlreadyUsed(newEmail) && !newEmail.equals(existing.getEmail())) {
                         throw new RuntimeException("Email already in use: " + newEmail);
                     }
@@ -489,7 +515,7 @@ public class LocalPartnerAuthService {
                 existing.setLinkedinProfile((String) userData.get("linkedinProfile"));
             }
 
-            // Documents
+            // ✅ Documents (avec validation déjà faite plus haut)
             if (userData.containsKey("numeroRegistreCommerce")) {
                 existing.setBusinessRegistrationNumber((String) userData.get("numeroRegistreCommerce"));
             }
@@ -524,7 +550,6 @@ public class LocalPartnerAuthService {
             throw new RuntimeException("Error during profile update: " + e.getMessage());
         }
     }
-
     // ========================================
     // MOT DE PASSE OUBLIÉ
     // ========================================
@@ -948,6 +973,51 @@ public class LocalPartnerAuthService {
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException("Erreur lors du changement de mot de passe: " + e.getMessage());
+        }
+    }
+    // ========================================
+// VALIDATIONS SPÉCIFIQUES
+// ========================================
+
+    private void validateBusinessRegistrationNumber(String number) {
+        if (number == null || number.trim().isEmpty()) {
+            return; // Optionnel, pas obligatoire
+        }
+
+        String trimmed = number.trim();
+
+        // Longueur minimum 3, maximum 30 caractères
+        if (trimmed.length() < 3) {
+            throw new RuntimeException("Le numéro de registre commerce doit contenir au moins 3 caractères");
+        }
+        if (trimmed.length() > 30) {
+            throw new RuntimeException("Le numéro de registre commerce ne doit pas dépasser 30 caractères");
+        }
+
+        // Format: lettres majuscules, chiffres, tiret
+        if (!trimmed.matches("^[A-Z0-9\\-]+$")) {
+            throw new RuntimeException("Le numéro de registre commerce doit contenir uniquement des lettres majuscules, des chiffres ou des tirets");
+        }
+    }
+
+    private void validateProfessionalTaxNumber(String number) {
+        if (number == null || number.trim().isEmpty()) {
+            return; // Optionnel, pas obligatoire
+        }
+
+        String trimmed = number.trim();
+
+        // Longueur minimum 5, maximum 25 caractères
+        if (trimmed.length() < 5) {
+            throw new RuntimeException("Le numéro de taxe professionnelle doit contenir au moins 5 caractères");
+        }
+        if (trimmed.length() > 25) {
+            throw new RuntimeException("Le numéro de taxe professionnelle ne doit pas dépasser 25 caractères");
+        }
+
+        // Format: lettres majuscules, chiffres, tiret
+        if (!trimmed.matches("^[A-Z0-9\\-]+$")) {
+            throw new RuntimeException("Le numéro de taxe professionnelle doit contenir uniquement des lettres majuscules, des chiffres ou des tirets");
         }
     }
 }

@@ -1009,4 +1009,38 @@ public class CollaborationServiceController {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
+    // ========================================
+// VISIBLE - Services approuvés + services acquis par l'user
+// ========================================
+    @GetMapping("/visible")
+    public ResponseEntity<?> getVisibleServices(
+            @RequestParam Long userId,
+            @RequestParam String userRole) {
+        try {
+            // 1. Tous les services approuvés
+            List<CollaborationService> approved = service
+                    .getCollaborationServicesByStatus(ServiceStatus.APPROVED);
+
+            // 2. Services acquis par cet utilisateur (même logique qu'Investment)
+            List<CollaborationService> myTaken = service
+                    .getServicesTakenByUser(userId, userRole);
+
+            // 3. Fusionner sans doublons
+            List<CollaborationService> all = new java.util.ArrayList<>(approved);
+            myTaken.forEach(s -> {
+                if (all.stream().noneMatch(a -> a.getId().equals(s.getId()))) {
+                    all.add(s);
+                }
+            });
+
+            return ResponseEntity.ok(all);
+
+        } catch (Exception e) {
+            log.error("❌ Erreur /visible: {}", e.getMessage(), e);
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+
+
 }

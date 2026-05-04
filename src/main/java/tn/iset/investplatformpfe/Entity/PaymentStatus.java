@@ -9,6 +9,7 @@ public enum PaymentStatus {
     AWAITING_PAYMENT,           // En attente de paiement (après approbation)
     COMPLETED,                  // Payé et finalisé
     FAILED,                     // Paiement échoué
-    CANCELLED,                  // Annulé
+    CANCELLED,
+    AWAITING_VALIDATION,
     EXPIRED                     //  NOUVEAU: Réservation expirée (non payé)
 }

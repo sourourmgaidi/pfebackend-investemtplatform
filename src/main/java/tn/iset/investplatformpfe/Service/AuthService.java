@@ -17,6 +17,8 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 @Service
 public class AuthService {
@@ -40,6 +42,50 @@ public class AuthService {
     private final RestTemplate restTemplate;
     private final UserSessionService sessionService;
 
+    // ========================================
+    // REGEX PATTERNS
+    // ========================================
+    private static final Pattern URL_PATTERN = Pattern.compile(
+            "^(https?://)([\\w\\-]+\\.)+[\\w]{2,}(/.*)?$"
+    );
+    private static final Pattern LINKEDIN_PATTERN = Pattern.compile(
+            "^(https?://)?(www\\.)?linkedin\\.com/in/[\\w\\-]+/?$"
+    );
+
+    // ========================================
+    // RÈGLES DE LONGUEUR PAR INDICATIF PAYS
+    // ========================================
+    private static final Map<String, Integer> PHONE_LENGTH_BY_DIAL_CODE = Map.ofEntries(
+            Map.entry("+216", 8),
+            Map.entry("+33",  9),
+            Map.entry("+213", 9),
+            Map.entry("+212", 9),
+            Map.entry("+218", 9),
+            Map.entry("+20",  10),
+            Map.entry("+966", 9),
+            Map.entry("+971", 9),
+            Map.entry("+974", 8),
+            Map.entry("+965", 8),
+            Map.entry("+1",   10),
+            Map.entry("+44",  10),
+            Map.entry("+49",  10),
+            Map.entry("+39",  10),
+            Map.entry("+34",  9),
+            Map.entry("+32",  9),
+            Map.entry("+41",  9),
+            Map.entry("+31",  9),
+            Map.entry("+46",  9),
+            Map.entry("+47",  8),
+            Map.entry("+45",  8),
+            Map.entry("+358", 9),
+            Map.entry("+7",   10),
+            Map.entry("+86",  11),
+            Map.entry("+81",  10),
+            Map.entry("+82",  10),
+            Map.entry("+91",  10),
+            Map.entry("+55",  11),
+            Map.entry("+61",  9)
+    );
 
     public AuthService(InvestorRepository investorRepository, UserSessionService sessionService) {
         this.investorRepository = investorRepository;
@@ -48,14 +94,13 @@ public class AuthService {
     }
 
     // ========================================
-    // VALIDATION GMAIL
+    // VALIDATION GMAIL (existante — inchangée)
     // ========================================
     private boolean isGmail(String email) {
         if (email == null) return false;
 
         String domain = email.substring(email.indexOf("@") + 1).toLowerCase();
 
-        // Liste des domaines Gmail acceptés
         List<String> gmailDomains = Arrays.asList(
                 "gmail.com",
                 "googlemail.com",
@@ -73,11 +118,138 @@ public class AuthService {
     }
 
     // ========================================
+    // NOUVELLES MÉTHODES DE VALIDATION
+    // ========================================
+
+    private void validateEmail(String email) {
+        if (email == null || email.trim().isEmpty()) {
+            throw new RuntimeException("L'email est obligatoire");
+        }
+        if (!email.contains("@")) {
+            throw new RuntimeException("Format d'email invalide");
+        }
+        if (!isGmail(email)) {
+            throw new RuntimeException("Seules les adresses Gmail sont autorisées (ex: @gmail.com, @gmail.fr, etc.)");
+        }
+    }
+
+    private void validatePassword(String password) {
+        if (password == null || password.trim().isEmpty()) {
+            throw new RuntimeException("Le mot de passe est obligatoire");
+        }
+        if (password.length() < 6) {
+            throw new RuntimeException("Le mot de passe doit contenir au moins 6 caractères");
+        }
+    }
+
+    private void validatePhone(String phone) {
+        if (phone == null || phone.trim().isEmpty()) return;
+
+        String p = phone.trim();
+
+        if (!p.startsWith("+")) {
+            throw new RuntimeException(
+                    "Numéro de téléphone invalide. Il doit commencer par l'indicatif pays (ex: +216 pour la Tunisie)."
+            );
+        }
+
+        // Trier par longueur décroissante pour éviter les conflits (+216 avant +21, etc.)
+        String matchedDialCode = null;
+        int matchedLength = -1;
+
+        List<String> sortedDialCodes = PHONE_LENGTH_BY_DIAL_CODE.keySet()
+                .stream()
+                .sorted((a, b) -> Integer.compare(b.length(), a.length()))
+                .collect(Collectors.toList());
+
+        for (String dialCode : sortedDialCodes) {
+            if (p.startsWith(dialCode)) {
+                matchedDialCode = dialCode;
+                matchedLength = PHONE_LENGTH_BY_DIAL_CODE.get(dialCode);
+                break;
+            }
+        }
+
+        if (matchedDialCode == null) {
+            throw new RuntimeException(
+                    "Indicatif pays non reconnu dans le numéro '" + p + "'. " +
+                            "Veuillez utiliser un des indicatifs disponibles (ex: +216, +33, +1, +44...)."
+            );
+        }
+
+        String localNumber = p.substring(matchedDialCode.length());
+
+        if (!localNumber.matches("[0-9]+")) {
+            throw new RuntimeException(
+                    "Le numéro de téléphone ne doit contenir que des chiffres après l'indicatif pays."
+            );
+        }
+
+        if (localNumber.length() != matchedLength) {
+            throw new RuntimeException(
+                    "Numéro de téléphone invalide pour l'indicatif " + matchedDialCode + ": " +
+                            "le numéro local doit contenir exactement " + matchedLength + " chiffres " +
+                            "(reçu: " + localNumber.length() + " chiffre(s))."
+            );
+        }
+    }
+
+    private void validateWebsite(String website) {
+        if (website != null && !website.trim().isEmpty()) {
+            if (!URL_PATTERN.matcher(website.trim()).matches()) {
+                throw new RuntimeException("URL du site web invalide. Format attendu: https://www.example.com");
+            }
+        }
+    }
+
+    private void validateLinkedin(String linkedin) {
+        if (linkedin != null && !linkedin.trim().isEmpty()) {
+            if (!LINKEDIN_PATTERN.matcher(linkedin.trim()).matches()) {
+                throw new RuntimeException("URL LinkedIn invalide. Format attendu: https://www.linkedin.com/in/votre-profil");
+            }
+        }
+    }
+
+    private void validateRequiredString(String value, String fieldName) {
+        if (value == null || value.trim().isEmpty()) {
+            throw new RuntimeException("Le champ '" + fieldName + "' est obligatoire");
+        }
+    }
+
+
+    private void validateOriginCountry(String country) {
+        if (country != null && !country.trim().isEmpty()) {
+            if (country.trim().length() < 2 || country.trim().length() > 60) {
+                throw new RuntimeException("Le pays d'origine doit contenir entre 2 et 60 caractères");
+            }
+            if (!country.matches("[\\p{L} \\-']+")) {
+                throw new RuntimeException("Le pays d'origine ne doit contenir que des lettres, espaces, tirets ou apostrophes");
+            }
+        }
+    }
+
+    private void validateNationality(String nationality) {
+        if (nationality != null && !nationality.trim().isEmpty()) {
+            if (nationality.trim().length() < 2 || nationality.trim().length() > 60) {
+                throw new RuntimeException("La nationalité doit contenir entre 2 et 60 caractères");
+            }
+            if (!nationality.matches("[\\p{L} \\-']+")) {
+                throw new RuntimeException("La nationalité ne doit contenir que des lettres, espaces, tirets ou apostrophes");
+            }
+        }
+    }
+
+    private void validateCompany(String company) {
+        if (company != null && !company.trim().isEmpty()) {
+            if (company.trim().length() < 2 || company.trim().length() > 100) {
+                throw new RuntimeException("Le nom de l'entreprise doit contenir entre 2 et 100 caractères");
+            }
+        }
+    }
+
+    // ========================================
     // INSCRIPTION - AVEC VALIDATION GMAIL
     // ========================================
-    // ========================================
-// INSCRIPTION - AVEC VALIDATION GMAIL
-// ========================================
     public Map<String, Object> register(Map<String, Object> userData) {
 
         String email = (String) userData.get("email");
@@ -85,14 +257,23 @@ public class AuthService {
         String firstName = (String) userData.get("firstName");
         String lastName = (String) userData.get("lastName");
 
-        // ✅ VALIDATION GMAIL
-        if (!isGmail(email)) {
-            throw new RuntimeException("Seules les adresses Gmail sont autorisées. Veuillez utiliser une adresse Gmail valide (ex: @gmail.com, @gmail.fr, etc.)");
-        }
+        // ✅ VALIDATIONS OBLIGATOIRES
+        validateEmail(email);
+        validateRequiredString(firstName, "firstName");
+        validateRequiredString(lastName, "lastName");
+        validatePassword(password);
+
+        // ✅ VALIDATIONS OPTIONNELLES
+        validatePhone((String) userData.get("phone"));
+        validateWebsite((String) userData.get("website"));
+        validateLinkedin((String) userData.get("linkedinProfile"));
+        validateOriginCountry((String) userData.get("originCountry"));
+        validateNationality((String) userData.get("nationality"));
+        validateCompany((String) userData.get("company"));
 
         // Récupérer le rôle depuis la requête (avec valeur par défaut INVESTOR)
         String roleStr = (String) userData.get("role");
-        Role role = Role.INVESTOR; // Valeur par défaut
+        Role role = Role.INVESTOR;
 
         if (roleStr != null && !roleStr.isEmpty()) {
             try {
@@ -102,19 +283,15 @@ public class AuthService {
             }
         }
 
-        // 1. Vérifier si l'email existe déjà dans MySQL
+        // Vérifier si l'email existe déjà dans MySQL
         if (investorRepository.existsByEmail(email)) {
             throw new RuntimeException("Cet email est déjà utilisé");
         }
 
         try {
-            // 2. Créer l'utilisateur dans Keycloak
             String userId = createUserInKeycloak(email, password, firstName, lastName);
-
-            // 3. Assigner le rôle dans Keycloak
             assignRoleToUser(userId, role.name());
 
-            // 4. Créer dans MySQL avec le rôle spécifié
             Investor newInvestor = new Investor();
             newInvestor.setEmail(email);
             newInvestor.setPassword(password);
@@ -124,7 +301,6 @@ public class AuthService {
             newInvestor.setRole(role);
             newInvestor.setRegistrationDate(LocalDateTime.now());
 
-            // Champs optionnels avec conversion appropriée
             if (userData.containsKey("phone") && userData.get("phone") != null) {
                 newInvestor.setPhone((String) userData.get("phone"));
             }
@@ -137,12 +313,10 @@ public class AuthService {
                 newInvestor.setOriginCountry((String) userData.get("originCountry"));
             }
 
-            // ✅ NOUVEAU: Nationality
             if (userData.containsKey("nationality") && userData.get("nationality") != null) {
                 newInvestor.setNationality((String) userData.get("nationality"));
             }
 
-            // ✅ CORRECTION : Convertir String en ActivityDomain
             if (userData.containsKey("activitySector") && userData.get("activitySector") != null) {
                 String sectorStr = (String) userData.get("activitySector");
                 try {
@@ -167,7 +341,6 @@ public class AuthService {
 
             Investor savedInvestor = investorRepository.save(newInvestor);
 
-            // 5. Réponse
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("message", "Inscription réussie");
@@ -209,7 +382,6 @@ public class AuthService {
                     Map.class
             );
 
-
             return response.getBody();
 
         } catch (Exception e) {
@@ -217,7 +389,6 @@ public class AuthService {
         }
     }
 
-    // ✅ NOUVELLE MÉTHODE
     public void startSessionAfterLogin(String email, String role) {
         try {
             sessionService.startSession(email, role);
@@ -227,7 +398,6 @@ public class AuthService {
         }
     }
 
-    // ✅ NOUVELLE MÉTHODE pour terminer la session
     public void endSession(String email) {
         try {
             sessionService.endSession(email);
@@ -236,6 +406,7 @@ public class AuthService {
             System.err.println("⚠️ Erreur fermeture session: " + e.getMessage());
         }
     }
+
     // ========================================
     // RAFRAÎCHIR LE TOKEN
     // ========================================
@@ -291,14 +462,37 @@ public class AuthService {
     // ========================================
     // METTRE À JOUR LE PROFIL - AVEC VALIDATION GMAIL
     // ========================================
-    // ========================================
-// METTRE À JOUR LE PROFIL - AVEC VALIDATION GMAIL
-// ========================================
     @Transactional
     public Map<String, Object> updateProfile(String email, Map<String, Object> userData) {
 
         Investor existing = investorRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
+
+        // ✅ VALIDATIONS SUR LES CHAMPS ENVOYÉS
+        if (userData.containsKey("phone"))
+            validatePhone((String) userData.get("phone"));
+
+        if (userData.containsKey("website"))
+            validateWebsite((String) userData.get("website"));
+
+        if (userData.containsKey("linkedinProfile"))
+            validateLinkedin((String) userData.get("linkedinProfile"));
+
+
+        if (userData.containsKey("originCountry"))
+            validateOriginCountry((String) userData.get("originCountry"));
+
+        if (userData.containsKey("nationality"))
+            validateNationality((String) userData.get("nationality"));
+
+        if (userData.containsKey("company"))
+            validateCompany((String) userData.get("company"));
+
+        if (userData.containsKey("firstName"))
+            validateRequiredString((String) userData.get("firstName"), "firstName");
+
+        if (userData.containsKey("lastName"))
+            validateRequiredString((String) userData.get("lastName"), "lastName");
 
         try {
             String adminToken = getAdminToken();
@@ -312,7 +506,6 @@ public class AuthService {
             boolean emailChanged = false;
             String newEmail = null;
 
-            // ✅ 1. COLLECTER LES MODIFICATIONS SANS EMAIL
             if (userData.containsKey("firstName")) {
                 String newFirstName = (String) userData.get("firstName");
                 existing.setFirstName(newFirstName);
@@ -325,7 +518,6 @@ public class AuthService {
                 keycloakUpdates.put("lastName", newLastName);
             }
 
-            // ✅ 2. GÉRER L'EMAIL SÉPARÉMENT AVEC VALIDATION GMAIL
             if (userData.containsKey("email")) {
                 newEmail = (String) userData.get("email");
 
@@ -335,7 +527,6 @@ public class AuthService {
                         throw new RuntimeException("Le nouvel email doit être une adresse Gmail valide");
                     }
 
-                    // Vérifier que le nouvel email n'est pas déjà utilisé
                     if (investorRepository.existsByEmail(newEmail)) {
                         throw new RuntimeException("Cet email est déjà utilisé: " + newEmail);
                     }
@@ -343,7 +534,6 @@ public class AuthService {
                 }
             }
 
-            // ✅ 3. AUTRES CHAMPS (PAS DANS KEYCLOAK)
             if (userData.containsKey("phone")) {
                 existing.setPhone((String) userData.get("phone"));
             }
@@ -356,12 +546,10 @@ public class AuthService {
                 existing.setOriginCountry((String) userData.get("originCountry"));
             }
 
-            // ✅ NOUVEAU: Mise à jour de la nationalité
             if (userData.containsKey("nationality")) {
                 existing.setNationality((String) userData.get("nationality"));
             }
 
-            // ✅ CORRECTION : Convertir String en ActivityDomain pour la mise à jour
             if (userData.containsKey("activitySector") && userData.get("activitySector") != null) {
                 String sectorStr = (String) userData.get("activitySector");
                 try {
@@ -380,30 +568,25 @@ public class AuthService {
                 existing.setLinkedinProfile((String) userData.get("linkedinProfile"));
             }
 
-            if (userData.containsKey("profilePicture")) {
-                existing.setProfilePicture((String) userData.get("profilePicture"));
-            }
 
             if (userData.containsKey("password")) {
                 String newPassword = (String) userData.get("password");
-                if (newPassword != null && !newPassword.isEmpty() && newPassword.length() >= 6) {
+                if (newPassword != null && !newPassword.isEmpty()) {
+                    validatePassword(newPassword);
                     existing.setPassword(newPassword);
                     updatePasswordInKeycloak(userId, newPassword, adminToken);
                 }
             }
 
-            // ✅ 4. METTRE À JOUR KEYCLOAK (UNIQUEMENT SI CHANGEMENT DE NOM/PRÉNOM)
             if (!keycloakUpdates.isEmpty()) {
                 updateUserInKeycloak(userId, keycloakUpdates, adminToken);
             }
 
-            // ✅ 5. METTRE À JOUR L'EMAIL DANS KEYCLOAK (SI NÉCESSAIRE)
             if (emailChanged) {
                 updateEmailInKeycloak(userId, newEmail, adminToken);
                 existing.setEmail(newEmail);
             }
 
-            // ✅ 6. SAUVEGARDER DANS MYSQL
             Investor updated = investorRepository.save(existing);
 
             Map<String, Object> response = new HashMap<>();
@@ -421,29 +604,25 @@ public class AuthService {
             throw new RuntimeException("Erreur lors de la mise à jour: " + e.getMessage());
         }
     }
+
+    // ========================================
     // MOT DE PASSE OUBLIÉ - ENVOI D'EMAIL
     // ========================================
     public Map<String, Object> forgotPassword(String email) {
 
-        // 1. Vérifier si l'email existe dans la base de données
         Investor investor = investorRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Aucun compte trouvé avec cet email"));
 
         try {
-            // 2. Obtenir un token admin
             String adminToken = getAdminToken();
-
-            // 3. Récupérer l'ID de l'utilisateur dans Keycloak
             String userId = getUserIdByEmail(email, adminToken);
 
             if (userId == null) {
                 throw new RuntimeException("Utilisateur non trouvé dans Keycloak");
             }
 
-            // 4. Envoyer un email de réinitialisation via Keycloak
             sendResetPasswordEmail(userId, adminToken);
 
-            // 5. Préparer la réponse
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("message", "Un email de réinitialisation a été envoyé à " + email);
@@ -457,36 +636,29 @@ public class AuthService {
     }
 
     // ========================================
-    // RÉINITIALISER LE MOT DE PASSE DIRECTEMENT (OPTION ADMIN)
+    // RÉINITIALISER LE MOT DE PASSE DIRECTEMENT
     // ========================================
     public Map<String, Object> resetPassword(String email, String newPassword) {
 
-        // Validation du mot de passe
         if (newPassword == null || newPassword.length() < 6) {
             throw new RuntimeException("Le mot de passe doit contenir au moins 6 caractères");
         }
 
         try {
-            // 1. Obtenir un token admin
             String adminToken = getAdminToken();
-
-            // 2. Récupérer l'ID de l'utilisateur dans Keycloak
             String userId = getUserIdByEmail(email, adminToken);
 
             if (userId == null) {
                 throw new RuntimeException("Utilisateur non trouvé dans Keycloak");
             }
 
-            // 3. Réinitialiser le mot de passe dans Keycloak
             updatePasswordInKeycloak(userId, newPassword, adminToken);
 
-            // 4. Mettre à jour le mot de passe dans MySQL
             Investor investor = investorRepository.findByEmail(email)
                     .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé dans la base de données"));
             investor.setPassword(newPassword);
             investorRepository.save(investor);
 
-            // 5. Préparer la réponse
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("message", "Mot de passe réinitialisé avec succès");
@@ -566,7 +738,6 @@ public class AuthService {
         headers.setBearerAuth(adminToken);
         headers.setContentType(MediaType.APPLICATION_JSON);
 
-        // 1. Récupérer l'ID du rôle
         String rolesUrl = authServerUrl + "/admin/realms/" + realm + "/roles";
 
         HttpEntity<?> entity = new HttpEntity<>(headers);
@@ -578,7 +749,6 @@ public class AuthService {
                 Map[].class
         );
 
-        // 2. Trouver le rôle par son nom
         String roleId = null;
         for (Map role : rolesResponse.getBody()) {
             if (roleName.equals(role.get("name"))) {
@@ -591,7 +761,6 @@ public class AuthService {
             throw new RuntimeException("Rôle " + roleName + " non trouvé dans Keycloak");
         }
 
-        // 3. Assigner le rôle à l'utilisateur
         String assignUrl = authServerUrl + "/admin/realms/" + realm + "/users/" + userId + "/role-mappings/realm";
 
         Map<String, Object> roleMapping = new HashMap<>();
@@ -633,9 +802,6 @@ public class AuthService {
         }
     }
 
-    // ========================================
-    // MÉTHODE POUR METTRE À JOUR L'UTILISATEUR DANS KEYCLOAK (SANS EMAIL)
-    // ========================================
     private void updateUserInKeycloak(String userId, Map<String, Object> updates, String adminToken) {
         String updateUrl = authServerUrl + "/admin/realms/" + realm + "/users/" + userId;
 
@@ -643,17 +809,14 @@ public class AuthService {
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setBearerAuth(adminToken);
 
-        // ⚠️ CRÉER UN NOUVEAU MAP POUR ÉVITER TOUT PROBLÈME
         Map<String, Object> safeUpdates = new HashMap<>();
 
-        // ✅ N'AJOUTER QUE LES CHAMPS AUTHORISÉS
         if (updates.containsKey("firstName")) {
             safeUpdates.put("firstName", updates.get("firstName"));
         }
         if (updates.containsKey("lastName")) {
             safeUpdates.put("lastName", updates.get("lastName"));
         }
-        // ❌ NE PAS AJOUTER "email" ou "username"
 
         if (!safeUpdates.isEmpty()) {
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(safeUpdates, headers);
@@ -667,9 +830,6 @@ public class AuthService {
         }
     }
 
-    // ========================================
-    // MÉTHODE POUR METTRE À JOUR L'EMAIL DANS KEYCLOAK
-    // ========================================
     private void updateEmailInKeycloak(String userId, String newEmail, String adminToken) {
         String updateUrl = authServerUrl + "/admin/realms/" + realm + "/users/" + userId;
 
@@ -680,7 +840,6 @@ public class AuthService {
         Map<String, Object> emailUpdate = new HashMap<>();
         emailUpdate.put("email", newEmail);
         emailUpdate.put("emailVerified", true);
-        // ⚠️ NE PAS AJOUTER "username" !
 
         HttpEntity<Map<String, Object>> entity = new HttpEntity<>(emailUpdate, headers);
 
@@ -693,9 +852,6 @@ public class AuthService {
         }
     }
 
-    // ========================================
-    // ENVOYER L'EMAIL DE RÉINITIALISATION
-    // ========================================
     private void sendResetPasswordEmail(String userId, String adminToken) {
         String emailUrl = authServerUrl + "/admin/realms/" + realm + "/users/" + userId + "/execute-actions-email";
 
@@ -703,13 +859,9 @@ public class AuthService {
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setBearerAuth(adminToken);
 
-        // Liste des actions requises (UPDATE_PASSWORD = réinitialiser le mot de passe)
         List<String> requiredActions = List.of("UPDATE_PASSWORD");
 
-        // URL de redirection après réinitialisation
         String redirectUri = "http://localhost:4200/reset-password-complete";
-
-        // ✅ AJOUTER LE CLIENT_ID COMME PARAMÈTRE
         String urlWithParams = emailUrl + "?client_id=" + clientId + "&redirect_uri=" + redirectUri;
 
         HttpEntity<List<String>> entity = new HttpEntity<>(requiredActions, headers);
@@ -729,9 +881,6 @@ public class AuthService {
         }
     }
 
-    // ========================================
-    // MÉTHODE POUR METTRE À JOUR LE MOT DE PASSE DANS KEYCLOAK
-    // ========================================
     private void updatePasswordInKeycloak(String userId, String newPassword, String adminToken) {
         String passwordUrl = authServerUrl + "/admin/realms/" + realm + "/users/" + userId + "/reset-password";
 
@@ -753,12 +902,10 @@ public class AuthService {
             throw new RuntimeException("Erreur lors de la mise à jour du mot de passe: " + e.getMessage());
         }
     }
+
     // ========================================
-// RÉCUPÉRER LE PROFIL COMPLET
-// ========================================
+    // RÉCUPÉRER LE PROFIL COMPLET
     // ========================================
-// RÉCUPÉRER LE PROFIL COMPLET
-// ========================================
     public Map<String, Object> getProfile(String email) {
         Investor investor = investorRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Investisseur non trouvé"));
@@ -771,7 +918,6 @@ public class AuthService {
         profile.put("phone", investor.getPhone());
         profile.put("company", investor.getCompany());
         profile.put("originCountry", investor.getOriginCountry());
-        // ✅ NOUVEAU: Nationality
         profile.put("nationality", investor.getNationality());
         profile.put("activitySector", investor.getActivitySector() != null ? investor.getActivitySector().name() : null);
         profile.put("website", investor.getWebsite());
@@ -783,44 +929,36 @@ public class AuthService {
 
         return profile;
     }
+
     // ========================================
-// SUPPRESSION COMPLÈTE DU COMPTE (KEYCLOAK + BASE DE DONNÉES)
-// ========================================
+    // SUPPRESSION COMPLÈTE DU COMPTE
+    // ========================================
     @Transactional
     public Map<String, Object> deleteAccount(String email, String password) {
 
-        // 1. Vérifier que l'utilisateur existe dans MySQL
         Investor investor = investorRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé dans la base de données"));
 
         try {
-            // 2. Obtenir un token admin pour Keycloak
             String adminToken = getAdminToken();
-
-            // 3. Récupérer l'ID de l'utilisateur dans Keycloak
             String userId = getUserIdByEmail(email, adminToken);
 
             if (userId == null) {
-                // Si l'utilisateur n'existe pas dans Keycloak, on supprime quand même de MySQL
                 System.out.println("⚠️ Utilisateur non trouvé dans Keycloak, suppression uniquement de MySQL");
             } else {
-                // 4. Valider le mot de passe (optionnel - pour plus de sécurité)
                 try {
                     validatePasswordWithKeycloak(email, password);
                 } catch (Exception e) {
                     throw new RuntimeException("Mot de passe incorrect. La suppression est annulée.");
                 }
 
-                // 5. Supprimer l'utilisateur de Keycloak
                 deleteUserFromKeycloak(userId, adminToken);
                 System.out.println("✅ Utilisateur supprimé de Keycloak: " + userId);
             }
 
-            // 6. Supprimer l'utilisateur de MySQL
             investorRepository.delete(investor);
             System.out.println("✅ Utilisateur supprimé de MySQL: " + email);
 
-            // 7. Préparer la réponse
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("message", "Compte supprimé avec succès");
@@ -835,8 +973,8 @@ public class AuthService {
     }
 
     // ========================================
-// SUPPRESSION DE KEYCLOAK
-// ========================================
+    // SUPPRESSION DE KEYCLOAK
+    // ========================================
     private void deleteUserFromKeycloak(String userId, String adminToken) {
         String deleteUrl = authServerUrl + "/admin/realms/" + realm + "/users/" + userId;
 
@@ -858,8 +996,8 @@ public class AuthService {
     }
 
     // ========================================
-// VALIDER LE MOT DE PASSE AVEC KEYCLOAK
-// ========================================
+    // VALIDER LE MOT DE PASSE AVEC KEYCLOAK
+    // ========================================
     private void validatePasswordWithKeycloak(String email, String password) {
         String tokenUrl = authServerUrl + "/realms/" + realm + "/protocol/openid-connect/token";
 
@@ -887,29 +1025,23 @@ public class AuthService {
     }
 
     // ========================================
-// VERSION SANS VALIDATION DE MOT DE PASSE (POUR ADMIN)
-// ========================================
+    // SUPPRESSION PAR ADMIN (SANS MOT DE PASSE)
+    // ========================================
     @Transactional
     public Map<String, Object> deleteAccountByAdmin(String email) {
 
-        // 1. Vérifier que l'utilisateur existe dans MySQL
         Investor investor = investorRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé dans la base de données"));
 
         try {
-            // 2. Obtenir un token admin pour Keycloak
             String adminToken = getAdminToken();
-
-            // 3. Récupérer l'ID de l'utilisateur dans Keycloak
             String userId = getUserIdByEmail(email, adminToken);
 
             if (userId != null) {
-                // 4. Supprimer l'utilisateur de Keycloak
                 deleteUserFromKeycloak(userId, adminToken);
                 System.out.println("✅ Utilisateur supprimé de Keycloak: " + userId);
             }
 
-            // 5. Supprimer l'utilisateur de MySQL
             investorRepository.delete(investor);
             System.out.println("✅ Utilisateur supprimé de MySQL: " + email);
 
@@ -925,44 +1057,37 @@ public class AuthService {
             throw new RuntimeException("Erreur lors de la suppression du compte: " + e.getMessage());
         }
     }
-    // CHANGER LE MOT DE PASSE (AVEC VALIDATION DE L'ANCIEN)
-// ========================================
+
+    // ========================================
+    // CHANGER LE MOT DE PASSE
+    // ========================================
     @Transactional
     public Map<String, Object> changePassword(String email, String oldPassword, String newPassword) {
 
-        // 1. Vérifier que l'investor existe
         Investor investor = investorRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Investisseur non trouvé"));
 
-        // 2. Validation du nouveau mot de passe
         if (newPassword == null || newPassword.length() < 6) {
             throw new RuntimeException("Le nouveau mot de passe doit contenir au moins 6 caractères");
         }
 
         try {
-            // 3. Vérifier l'ancien mot de passe avec Keycloak
             validatePasswordWithKeycloak(email, oldPassword);
 
-            // 4. Obtenir un token admin
             String adminToken = getAdminToken();
-
-            // 5. Récupérer l'ID de l'utilisateur dans Keycloak
             String userId = getUserIdByEmail(email, adminToken);
 
             if (userId == null) {
                 throw new RuntimeException("Utilisateur non trouvé dans Keycloak");
             }
 
-            // 6. Mettre à jour le mot de passe dans Keycloak
             updatePasswordInKeycloak(userId, newPassword, adminToken);
             System.out.println("✅ Mot de passe mis à jour dans Keycloak pour: " + email);
 
-            // 7. Mettre à jour le mot de passe dans MySQL
             investor.setPassword(newPassword);
             investorRepository.save(investor);
             System.out.println("✅ Mot de passe mis à jour dans MySQL pour: " + email);
 
-            // 8. Préparer la réponse
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("message", "Mot de passe changé avec succès");
@@ -977,8 +1102,8 @@ public class AuthService {
     }
 
     // ========================================
-// RÉCUPÉRER L'EMAIL DEPUIS KEYCLOAK VIA LE SUB (userId)
-// ========================================
+    // RÉCUPÉRER L'EMAIL DEPUIS KEYCLOAK VIA LE SUB
+    // ========================================
     public String findEmailByKeycloakSub(String sub) {
         try {
             String adminToken = getAdminToken();
@@ -997,9 +1122,9 @@ public class AuthService {
             );
 
             if (response.getBody() != null) {
-                String email = (String) response.getBody().get("email");
-                System.out.println("📧 Email trouvé via Keycloak sub: " + email);
-                return email;
+                String emailFound = (String) response.getBody().get("email");
+                System.out.println("📧 Email trouvé via Keycloak sub: " + emailFound);
+                return emailFound;
             }
 
             return null;
@@ -1008,5 +1133,4 @@ public class AuthService {
             return null;
         }
     }
-
 }

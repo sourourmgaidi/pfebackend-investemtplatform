@@ -10,6 +10,7 @@ import tn.iset.investplatformpfe.Entity.*;
 import tn.iset.investplatformpfe.Entity.TouristService;
 import tn.iset.investplatformpfe.Repository.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -17,7 +18,7 @@ import java.util.List;
 import java.util.Map;
 
 @Service
-@Transactional
+
 public class TouristServiceService {
 
     private static final Logger log = LoggerFactory.getLogger(TouristServiceService.class);
@@ -155,6 +156,112 @@ public class TouristServiceService {
 
         return service;
     }
+    // ========================================
+// VALIDATION
+// ========================================
+    private void validateRequiredFields(TouristService service) {
+        log.debug("🔍 Validating required fields for tourist service");
+
+        // ✅ Name
+        if (service.getName() == null || service.getName().trim().isEmpty()) {
+            log.error("❌ Validation failed: missing name");
+            throw new RuntimeException(
+                    "⚠️ Service name is required. Please provide a valid name for your tourist service."
+            );
+        }
+        if (service.getName().trim().length() < 3) {
+            log.error("❌ Validation failed: name too short ({})", service.getName());
+            throw new RuntimeException(
+                    "⚠️ Service name is too short. The name must contain at least 3 characters."
+            );
+        }
+        if (service.getName().trim().length() > 150) {
+            log.error("❌ Validation failed: name too long");
+            throw new RuntimeException(
+                    "⚠️ Service name is too long. The name must not exceed 150 characters."
+            );
+        }
+
+        // ✅ Price
+        if (service.getPrice() == null) {
+            log.error("❌ Validation failed: missing price");
+            throw new RuntimeException(
+                    "⚠️ Service price is required. Please specify the price for this tourist service."
+            );
+        }
+        if (service.getPrice().compareTo(BigDecimal.ZERO) < 0) {
+            log.error("❌ Validation failed: price < 0 ({})", service.getPrice());
+            throw new RuntimeException(
+                    "⚠️ Invalid price: " + service.getPrice() + " TND. " +
+                            "The price cannot be negative. Please enter a valid price."
+            );
+        }
+
+        // ✅ Group Price (optionnel mais doit être positif si fourni)
+        if (service.getGroupPrice() != null &&
+                service.getGroupPrice().compareTo(BigDecimal.ZERO) < 0) {
+            log.error("❌ Validation failed: group price < 0 ({})", service.getGroupPrice());
+            throw new RuntimeException(
+                    "⚠️ Invalid group price: " + service.getGroupPrice() + " TND. " +
+                            "The group price cannot be negative. Please enter a valid group price."
+            );
+        }
+
+        // ✅ Availability
+        if (service.getAvailability() == null) {
+            log.error("❌ Validation failed: missing availability");
+            throw new RuntimeException(
+                    "⚠️ Availability is required. Please indicate when this tourist service will be available."
+            );
+        }
+
+        // ✅ Contact Person
+        if (service.getContactPerson() == null || service.getContactPerson().trim().isEmpty()) {
+            log.error("❌ Validation failed: missing contact person");
+            throw new RuntimeException(
+                    "⚠️ Contact person is required. Please provide the name of the responsible contact for this service."
+            );
+        }
+        if (service.getContactPerson().trim().length() < 3) {
+            log.error("❌ Validation failed: contact person name too short");
+            throw new RuntimeException(
+                    "⚠️ Contact person name is too short. The name must contain at least 3 characters."
+            );
+        }
+        if (service.getContactPerson().trim().length() > 100) {
+            log.error("❌ Validation failed: contact person name too long");
+            throw new RuntimeException(
+                    "⚠️ Contact person name is too long. The name must not exceed 100 characters."
+            );
+        }
+
+        // ✅ Category
+        if (service.getCategory() == null) {
+            log.error("❌ Validation failed: missing category");
+            throw new RuntimeException(
+                    "⚠️ Service category is required. Please select a category for this tourist service."
+            );
+        }
+
+        if (service.getDurationHours() != null && service.getDurationHours() <= 0) {
+            log.error("❌ Validation failed: duration <= 0 ({})", service.getDurationHours());
+            throw new RuntimeException(
+                    "⚠️ Invalid duration: " + service.getDurationHours() + " hours. " +
+                            "The service duration must be greater than 0 hours."
+            );
+        }
+
+        // ✅ Max Capacity (optionnel mais doit être > 0 si fourni)
+        if (service.getMaxCapacity() != null && service.getMaxCapacity() <= 0) {
+            log.error("❌ Validation failed: max capacity <= 0 ({})", service.getMaxCapacity());
+            throw new RuntimeException(
+                    "⚠️ Invalid maximum capacity: " + service.getMaxCapacity() + ". " +
+                            "The maximum capacity must be greater than 0 participants."
+            );
+        }
+
+        log.debug("✅ All fields validated successfully for tourist service");
+    }
 
     // ✅ GET services rejetés par email du provider
     public List<TouristService> getRejectedServicesByProviderEmail(String email) {
@@ -188,6 +295,7 @@ public class TouristServiceService {
 
         service.setStatus(ServiceStatus.PENDING);
         service.setCreatedAt(LocalDateTime.now());
+        validateRequiredFields(service);
         List<TouristServiceDocument> documents = service.getDocuments();
         service.setDocuments(new ArrayList<>());
 
@@ -721,6 +829,7 @@ public class TouristServiceService {
             }
             log.info("✅ Documents remplacés avec succès");
         }
+        validateRequiredFields(existing);
 
         TouristService saved = touristServiceRepository.save(existing);
 
@@ -959,22 +1068,28 @@ public class TouristServiceService {
         try {
             // Appeler la méthode du service de favoris pour retirer ce service de tous les touristes
             favoriteTouristService.removeServiceFromAllFavorites(service.getId());
-            log.info("✅ Favoris des touristes nettoyés avec succès");
+            log.info(" Favoris des touristes nettoyés avec succès");
         } catch (Exception e) {
-            log.error("❌ Erreur lors du nettoyage des favoris: {}", e.getMessage());
+            log.error(" Erreur lors du nettoyage des favoris: {}", e.getMessage());
         }
+    }
+    // GET services visibles par les touristes (APPROVED + PENDING_ACQUISITION + RESERVED)
+    public List<TouristService> getVisibleServices() {
+        return touristServiceRepository.findByStatusIn(
+                List.of(ServiceStatus.APPROVED, ServiceStatus.PENDING_ACQUISITION, ServiceStatus.RESERVED)
+        );
     }
 
     /**
-     * ✅ Révoquer l'autorisation de modification
+     * Révoquer l'autorisation de modification
      */
     @Transactional
     public void revokeEditAuthorization(Long serviceId) {
-        log.info("🔓 Révocation autorisation de modification pour service ID: {}", serviceId);
+        log.info(" Révocation autorisation de modification pour service ID: {}", serviceId);
 
         TouristService service = getServiceById(serviceId);
 
-        // ✅ Révoquer l'autorisation
+        // Révoquer l'autorisation
         service.setEditAuthorizedUntil(null);
         service.setAuthorizedByAdminId(null);
         touristServiceRepository.save(service);

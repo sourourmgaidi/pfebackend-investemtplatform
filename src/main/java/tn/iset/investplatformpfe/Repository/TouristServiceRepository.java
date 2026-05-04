@@ -21,7 +21,7 @@ public interface TouristServiceRepository extends JpaRepository<TouristService, 
     @Query("SELECT t FROM TouristService t WHERE t.region.id = :regionId AND t.status IN :statuses")
     List<TouristService> findByRegionIdAndStatusIn(@Param("regionId") Long regionId, @Param("statuses") List<ServiceStatus> statuses);
 
-    // ✅ NOUVELLE MÉTHODE POUR COMPTER AVEC PLUSIEURS STATUTS
+    List<TouristService> findByStatusIn(List<ServiceStatus> statuses);
     @Query("SELECT COUNT(t) FROM TouristService t WHERE t.region.id = :regionId AND t.status IN :statuses")
     long countByRegionIdAndStatusIn(@Param("regionId") Long regionId, @Param("statuses") List<ServiceStatus> statuses);
 }

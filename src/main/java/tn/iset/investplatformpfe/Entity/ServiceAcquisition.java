@@ -33,11 +33,7 @@ public class ServiceAcquisition {
     @Column(nullable = false)
     private PaymentStatus paymentStatus = PaymentStatus.PENDING;
 
-    @Column(name = "flouci_payment_id")
-    private String flouciPaymentId;
 
-    @Column(name = "payment_url", length = 1000)
-    private String paymentUrl;
 
     @Column(name = "amount")
     private Double amount;
@@ -54,23 +50,16 @@ public class ServiceAcquisition {
     @Column(name = "reservation_expires_at")
     private LocalDateTime reservationExpiresAt;  // Date d'expiration de la réservation
 
-    // ✅ CHANGER boolean → Boolean
-    @Column(name = "reminder_sent")
-    private Boolean reminderSent = false;  // Rappel déjà envoyé ?
+
 
     @Column(name = "acquired_at")
     private LocalDateTime acquiredAt;
 
     @Column(name = "paid_at")
     private LocalDateTime paidAt;
+    private LocalDateTime approvedAt;   // date où le partner a approuvé
+    private boolean reminderSent = false;
 
-    @PrePersist
-    public void prePersist() {
-        this.acquiredAt = LocalDateTime.now();
-        if (this.reminderSent == null) {
-            this.reminderSent = false;
-        }
-    }
 
     // Getters et Setters
     public String getRejectionReason() { return rejectionReason; }
@@ -103,12 +92,6 @@ public class ServiceAcquisition {
     public PaymentStatus getPaymentStatus() { return paymentStatus; }
     public void setPaymentStatus(PaymentStatus s) { this.paymentStatus = s; }
 
-    public String getFlouciPaymentId() { return flouciPaymentId; }
-    public void setFlouciPaymentId(String id) { this.flouciPaymentId = id; }
-
-    public String getPaymentUrl() { return paymentUrl; }
-    public void setPaymentUrl(String url) { this.paymentUrl = url; }
-
     public Double getAmount() { return amount; }
     public void setAmount(Double a) { this.amount = a; }
 
@@ -129,12 +112,19 @@ public class ServiceAcquisition {
         this.reservationExpiresAt = reservationExpiresAt;
     }
 
-    // ✅ Modifier les getters/setters pour Boolean
-    public Boolean getReminderSent() {
-        return reminderSent != null ? reminderSent : false;
+    public LocalDateTime getApprovedAt() {
+        return approvedAt;
     }
 
-    public void setReminderSent(Boolean reminderSent) {
+    public void setApprovedAt(LocalDateTime approvedAt) {
+        this.approvedAt = approvedAt;
+    }
+
+    public boolean isReminderSent() {
+        return reminderSent;
+    }
+
+    public void setReminderSent(boolean reminderSent) {
         this.reminderSent = reminderSent;
     }
 }

@@ -17,7 +17,7 @@ import tn.iset.investplatformpfe.Entity.*;
 import tn.iset.investplatformpfe.Repository.LocalPartnerRepository;
 import tn.iset.investplatformpfe.Service.FileStorageService;
 import tn.iset.investplatformpfe.Service.TouristServiceService;
-import tools.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -178,7 +178,7 @@ public class TouristServiceController {
         }
     }
 
-    // ✅ DELETE supprimer un service (PENDING ou REJECTED et propriétaire)
+    //  DELETE supprimer un service (PENDING ou REJECTED et propriétaire)
     @DeleteMapping("/{id}")
     public ResponseEntity<?> delete(@PathVariable Long id,
                                     @AuthenticationPrincipal Jwt jwt) {
@@ -190,7 +190,11 @@ public class TouristServiceController {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
-
+    //  GET services visibles par les touristes (APPROVED + PENDING_ACQUISITION + RESERVED)
+    @GetMapping("/visible")
+    public ResponseEntity<List<TouristService>> getVisibleServices() {
+        return ResponseEntity.ok(touristServiceService.getVisibleServices());
+    }
     // ================ ENDPOINTS POUR LES DEMANDES (PARTENAIRE) ================
 
     // ✅ Partenaire: Demander la modification d'un service APPROUVÉ
@@ -479,10 +483,16 @@ public class TouristServiceController {
             TouristService result = this.touristServiceService.getServiceById(created.getId());
             return new ResponseEntity<>(result, HttpStatus.CREATED);
 
-        } catch (Exception e) {
-            log.error("❌ Erreur: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+        } catch (RuntimeException e) {
+            // ✅ Erreurs métier (validation des champs) → 400
+            log.error("❌ Erreur validation: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(Map.of("error", e.getMessage()));
+        } catch (Exception e) {
+            // ✅ Erreurs techniques (JSON, fichiers) → 500
+            log.error("❌ Erreur technique: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Technical error: " + e.getMessage()));
         }
     }
 
@@ -516,14 +526,12 @@ public class TouristServiceController {
                         "Vous ne pouvez modifier que vos propres services"));
             }
 
-            // ✅ SAUVEGARDER L'ÉTAT AVANT MODIFICATION
             boolean wasEditAuthorized = existingService.isEditAuthorized();
             boolean wasApprovedService = existingService.getStatus() == ServiceStatus.APPROVED && wasEditAuthorized;
 
             log.info("📝 État avant modification - Status: {}, editAuthorized: {}, wasApprovedService: {}",
                     existingService.getStatus(), wasEditAuthorized, wasApprovedService);
 
-            // Vérification des autorisations
             boolean canModify = false;
             if (existingService.getStatus() == ServiceStatus.PENDING) {
                 canModify = true;
@@ -540,19 +548,16 @@ public class TouristServiceController {
                         "Ce service ne peut pas être modifié dans son état actuel"));
             }
 
-            TouristService serviceDetails = null;
             boolean hasTextUpdates = false;
 
-            // ✅ Mettre à jour les champs texte si fournis
             if (serviceJson != null && !serviceJson.trim().isEmpty()) {
                 ObjectMapper mapper = new ObjectMapper();
-                serviceDetails = mapper.readValue(serviceJson, TouristService.class);
+                TouristService serviceDetails = mapper.readValue(serviceJson, TouristService.class);
                 existingService = touristServiceService.updateService(id, serviceDetails, email);
                 hasTextUpdates = true;
                 log.info("✅ Champs texte mis à jour");
             }
 
-            // Traiter les nouveaux fichiers
             List<TouristServiceDocument> newDocuments = new ArrayList<>();
             boolean hasFileUpdates = false;
 
@@ -576,28 +581,20 @@ public class TouristServiceController {
                     }
                 }
 
-                // Ajouter les nouveaux documents
                 for (TouristServiceDocument doc : newDocuments) {
                     this.touristServiceService.addDocumentToService(id, doc);
                 }
                 log.info("✅ {} documents ajoutés", newDocuments.size());
             }
 
-            // ✅ RÉCUPÉRER LE SERVICE APRÈS TOUTES LES MODIFICATIONS
             TouristService result = this.touristServiceService.getServiceById(id);
 
-            // ✅ SI C'ÉTAIT UN SERVICE APPROUVÉ AVEC AUTORISATION ET QU'IL Y A EU DES MODIFICATIONS
             if (wasApprovedService && (hasTextUpdates || hasFileUpdates)) {
-                log.info("🔄 Réinitialisation de l'autorisation pour le service ID: {} (modifications effectuées)", id);
-
-                // Réinitialiser l'autorisation
+                log.info("🔄 Réinitialisation de l'autorisation pour le service ID: {}", id);
                 result.setEditAuthorizedUntil(null);
                 result.setAuthorizedByAdminId(null);
-
-                // Sauvegarder les changements
                 result = touristServiceService.save(result);
-
-                log.info("✅ Autorisation réinitialisée - editAuthorizedUntil: null");
+                log.info("✅ Autorisation réinitialisée");
             }
 
             log.info("📝 État final - editAuthorizedUntil: {}, deleteAuthorized: {}",
@@ -605,9 +602,16 @@ public class TouristServiceController {
 
             return ResponseEntity.ok(result);
 
+        } catch (RuntimeException e) {
+            // ✅ Erreurs métier (validation des champs) → 400
+            log.error("❌ Erreur validation: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
-            log.error("❌ Erreur: {}", e.getMessage(), e);
-            return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
+            // ✅ Erreurs techniques (JSON, fichiers) → 500
+            log.error("❌ Erreur technique: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", "Technical error: " + e.getMessage()));
         }
     }
 

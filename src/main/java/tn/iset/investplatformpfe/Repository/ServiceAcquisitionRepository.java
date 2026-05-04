@@ -14,7 +14,9 @@ import java.util.Optional;
 public interface ServiceAcquisitionRepository
         extends JpaRepository<ServiceAcquisition, Long> {
 
-    Optional<ServiceAcquisition> findByFlouciPaymentId(String flouciPaymentId);
+    // ❌ SUPPRIMEZ CETTE LIGNE :
+    // Optional<ServiceAcquisition> findByFlouciPaymentId(String flouciPaymentId);
+
     Optional<ServiceAcquisition> findByOrderId(String orderId);
 
     boolean existsByServiceIdAndServiceTypeAndPaymentStatus(
@@ -97,4 +99,13 @@ public interface ServiceAcquisitionRepository
             @Param("acquirerId") Long acquirerId,
             @Param("role") Role role
     );
+    List<ServiceAcquisition> findByServiceIdAndServiceTypeAndAcquirerId(
+            Long serviceId, String serviceType, Long acquirerId);
+
+    @Query("SELECT a FROM ServiceAcquisition a " +
+            "WHERE a.paymentStatus = 'AWAITING_VALIDATION' " +
+            "AND a.approvedAt <= :threshold " +
+            "AND a.reminderSent = false")
+    List<ServiceAcquisition> findAwaitingValidationNeedingReminder(
+            @Param("threshold") LocalDateTime threshold);
 }

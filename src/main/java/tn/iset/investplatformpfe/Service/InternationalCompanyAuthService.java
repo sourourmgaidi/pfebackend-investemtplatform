@@ -139,20 +139,22 @@ public class InternationalCompanyAuthService {
             throw new RuntimeException("All required fields must be filled");
         }
 
-        // ✅ VALIDATION GMAIL
+        //  VALIDATION GMAIL
         if (!isGmail(email)) {
             throw new RuntimeException("Only Gmail addresses are allowed. Please use a valid Gmail address (e.g., @gmail.com, @gmail.fr, etc.)");
         }
 
-        // ✅ VÉRIFIER L'EMAIL DANS TOUTES LES TABLES
+        //  VÉRIFIER L'EMAIL DANS TOUTES LES TABLES
         if (isEmailAlreadyUsed(email)) {
             throw new RuntimeException("This email is already in use. Please use a different email address.");
         }
+        validateSiret(siret);
 
         // Vérifier si le SIRET existe déjà
         if (companyRepository.existsBySiret(siret)) {
             throw new RuntimeException("This SIRET number is already in use");
         }
+
 
         try {
             // Créer l'utilisateur dans Keycloak
@@ -424,12 +426,22 @@ public class InternationalCompanyAuthService {
                 existing.setOriginCountry((String) userData.get("originCountry"));
             }
 
+
             // Mise à jour du SIRET
+            String newSiret = null;
             if (userData.containsKey("siret")) {
-                String newSiret = (String) userData.get("siret");
-                System.out.println("📥 Mise à jour SIRET: '" + newSiret + "'");
-                existing.setSiret(newSiret);
+                newSiret = (String) userData.get("siret");
+                if (newSiret != null && !newSiret.trim().isEmpty()) {
+                    validateSiret(newSiret);
+                    // Vérifier si le nouveau SIRET n'est pas déjà utilisé par un autre compte
+                    if (!newSiret.equals(existing.getSiret()) && companyRepository.existsBySiret(newSiret)) {
+                        throw new RuntimeException("This SIRET number is already in use by another company");
+                    }
+                }
             }
+// Sauvegarder le SIRET (même s'il est null ou vide)
+            existing.setSiret(newSiret);
+
 
             // Mise à jour du secteur d'activité
             if (userData.containsKey("activitySector") && userData.get("activitySector") != null) {
@@ -934,6 +946,22 @@ public class InternationalCompanyAuthService {
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException("Erreur lors du changement de mot de passe: " + e.getMessage());
+        }
+    }
+    // ========================================
+// VALIDATION SPÉCIFIQUE POUR SIRET
+// ========================================
+
+    private void validateSiret(String siret) {
+        if (siret == null || siret.trim().isEmpty()) {
+            throw new RuntimeException("Le numéro SIRET est obligatoire");
+        }
+
+        String trimmed = siret.trim();
+
+        // Le SIRET doit contenir exactement 14 chiffres
+        if (!trimmed.matches("^\\d{14}$")) {
+            throw new RuntimeException("Le numéro SIRET doit contenir exactement 14 chiffres");
         }
     }
 }

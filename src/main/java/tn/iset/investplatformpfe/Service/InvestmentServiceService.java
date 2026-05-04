@@ -415,6 +415,8 @@ public class InvestmentServiceService {
                 }
             }
         }
+        validateRequiredFields(existingService);
+
 
         InvestmentService updated = investmentRepository.save(existingService);
         log.info("✅ Service mis à jour avec succès, ID: {}", updated.getId());
@@ -1199,31 +1201,106 @@ public class InvestmentServiceService {
     // VALIDATION
     // ========================================
     private void validateRequiredFields(InvestmentService service) {
-        log.debug("🔍 Validation des champs obligatoires");
+        log.debug("🔍 Validating required fields");
 
+        // ✅ Name
         if (service.getName() == null || service.getName().trim().isEmpty()) {
-            log.error("❌ Validation échouée: nom manquant");
-            throw new RuntimeException("Le nom est obligatoire");
-        }
-        if (service.getTitle() == null || service.getTitle().trim().isEmpty()) {
-            log.error("❌ Validation échouée: titre manquant");
-            throw new RuntimeException("Le titre est obligatoire");
-        }
-        if (service.getRegion() == null) {
-            log.error("❌ Validation échouée: région manquante");
-            throw new RuntimeException("La région est obligatoire");
-        }
-        // 🗑️ SUPPRIMÉ : validation du prix
-        if (service.getAvailability() == null) {
-            log.error("❌ Validation échouée: disponibilité manquante");
-            throw new RuntimeException("La disponibilité est obligatoire");
-        }
-        if (service.getContactPerson() == null || service.getContactPerson().trim().isEmpty()) {
-            log.error("❌ Validation échouée: contact manquant");
-            throw new RuntimeException("Le contact responsable est obligatoire");
+            log.error("❌ Validation failed: missing name");
+            throw new RuntimeException(
+                    "⚠️ Service name is required. Please provide a valid name for your investment service."
+            );
         }
 
-        log.debug("✅ Validation réussie");
+        // ✅ Title
+        if (service.getTitle() == null || service.getTitle().trim().isEmpty()) {
+            log.error("❌ Validation failed: missing title");
+            throw new RuntimeException(
+                    "⚠️ Service title is required. Please provide a clear and descriptive title for your investment opportunity."
+            );
+        }
+
+        // ✅ Region
+        if (service.getRegion() == null) {
+            log.error("❌ Validation failed: missing region");
+            throw new RuntimeException(
+                    "⚠️ Region is required. Please select the region where this investment opportunity is located."
+            );
+        }
+
+        // ✅ Availability
+        if (service.getAvailability() == null) {
+            log.error("❌ Validation failed: missing availability");
+            throw new RuntimeException(
+                    "⚠️ Availability is required. Please indicate the availability status of this investment service."
+            );
+        }
+
+        // ✅ Contact Person
+        if (service.getContactPerson() == null || service.getContactPerson().trim().isEmpty()) {
+            log.error("❌ Validation failed: missing contact person");
+            throw new RuntimeException(
+                    "⚠️ Contact person is required. Please provide the name of the responsible contact for this investment service."
+            );
+        }
+
+        // ✅ Total Amount
+        if (service.getTotalAmount() == null) {
+            log.error("❌ Validation failed: missing total amount");
+            throw new RuntimeException(
+                    "⚠️ Total investment amount is required. Please specify the total funding needed for this project."
+            );
+        }
+        if (service.getTotalAmount().compareTo(BigDecimal.ZERO) <= 0) {
+            log.error("❌ Validation failed: total amount <= 0 ({})", service.getTotalAmount());
+            throw new RuntimeException(
+                    "⚠️ Invalid total amount: " + service.getTotalAmount() + " TND. " +
+                            "The total investment amount must be greater than 0 TND."
+            );
+        }
+
+        // ✅ Minimum Amount
+        if (service.getMinimumAmount() == null) {
+            log.error("❌ Validation failed: missing minimum amount");
+            throw new RuntimeException(
+                    "⚠️ Minimum investment amount is required. Please specify the minimum amount an investor can contribute."
+            );
+        }
+        if (service.getMinimumAmount().compareTo(BigDecimal.ZERO) <= 0) {
+            log.error("❌ Validation failed: minimum amount <= 0 ({})", service.getMinimumAmount());
+            throw new RuntimeException(
+                    "⚠️ Invalid minimum amount: " + service.getMinimumAmount() + " TND. " +
+                            "The minimum investment amount must be greater than 0 TND."
+            );
+        }
+
+        // ✅ Total >= Minimum
+        if (service.getTotalAmount().compareTo(service.getMinimumAmount()) < 0) {
+            log.error("❌ Validation failed: totalAmount ({}) < minimumAmount ({})",
+                    service.getTotalAmount(), service.getMinimumAmount());
+            throw new RuntimeException(
+                    "⚠️ Invalid amount configuration: Total amount (" + service.getTotalAmount() + " TND) " +
+                            "cannot be less than the minimum investment amount (" + service.getMinimumAmount() + " TND). " +
+                            "Please ensure the total amount is greater than or equal to the minimum amount."
+            );
+        }
+
+        // ✅ Deadline Date
+        if (service.getDeadlineDate() == null) {
+            log.error("❌ Validation failed: missing deadline date");
+            throw new RuntimeException(
+                    "⚠️ Deadline date is required. Please specify the closing date for this investment opportunity."
+            );
+        }
+        if (!service.getDeadlineDate().isAfter(LocalDate.now())) {
+            log.error("❌ Validation failed: deadlineDate ({}) is not in the future", service.getDeadlineDate());
+            throw new RuntimeException(
+                    "⚠️ Invalid deadline date: " + service.getDeadlineDate() + ". " +
+                            "The deadline date must be a future date (strictly after today: " + LocalDate.now() + "). " +
+                            "Please select a valid future date."
+            );
+        }
+
+        log.debug("✅ All fields validated successfully");
     }
 
     // ========================================

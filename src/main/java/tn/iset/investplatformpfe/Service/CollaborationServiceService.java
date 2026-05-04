@@ -30,6 +30,8 @@ public class CollaborationServiceService {
     private final CollaborationServiceRequestRepository collaborationRequestRepository;
     private final AdminRepository adminRepository;
     private final FileStorageService fileStorageService;
+    private final ServiceAcquisitionRepository serviceAcquisitionRepository;
+
 
     public CollaborationServiceService(
             CollaborationServiceRepository repository,
@@ -39,7 +41,8 @@ public class CollaborationServiceService {
             NotificationService notificationService,
             CollaborationServiceRequestRepository collaborationRequestRepository,
             AdminRepository adminRepository,
-            FileStorageService fileStorageService) {
+            FileStorageService fileStorageService,
+            ServiceAcquisitionRepository serviceAcquisitionRepository) {
         this.repository = repository;
         this.documentRepository = documentRepository;
         this.localPartnerRepository = localPartnerRepository;
@@ -48,8 +51,9 @@ public class CollaborationServiceService {
         this.collaborationRequestRepository = collaborationRequestRepository;
         this.adminRepository = adminRepository;
         this.fileStorageService = fileStorageService;
+        this.serviceAcquisitionRepository = serviceAcquisitionRepository;
 
-        log.info("✅ CollaborationServiceService initialized");
+        log.info("CollaborationServiceService initialized");
     }
 
     // ========================================
@@ -422,6 +426,7 @@ public class CollaborationServiceService {
             }
         }
 
+        validateRequiredFields(existingService);
         CollaborationService updated = repository.save(existingService);
         log.info("✅ Service updated successfully, ID: {}", updated.getId());
 
@@ -1117,28 +1122,78 @@ public class CollaborationServiceService {
     private void validateRequiredFields(CollaborationService service) {
         log.debug("🔍 Validating required fields");
 
+        // ✅ Name
         if (service.getName() == null || service.getName().trim().isEmpty()) {
             log.error("❌ Validation failed: missing name");
-            throw new RuntimeException("Name is required");
+            throw new RuntimeException(
+                    "⚠️ Service name is required. Please provide a valid name for your collaboration service."
+            );
         }
-        if (service.getRegion() == null) {
-            log.error("❌ Validation failed: missing region");
-            throw new RuntimeException("Region is required");
+        if (service.getName().trim().length() < 3) {
+            log.error("❌ Validation failed: name too short ({})", service.getName());
+            throw new RuntimeException(
+                    "⚠️ Service name is too short. The name must contain at least 3 characters."
+            );
         }
-        if (service.getRequestedBudget() == null) {
-            log.error("❌ Validation failed: missing budget");
-            throw new RuntimeException("Budget is required");
-        }
-        if (service.getAvailability() == null) {
-            log.error("❌ Validation failed: missing availability");
-            throw new RuntimeException("Availability is required");
-        }
-        if (service.getContactPerson() == null || service.getContactPerson().trim().isEmpty()) {
-            log.error("❌ Validation failed: missing contact person");
-            throw new RuntimeException("Contact person is required");
+        if (service.getName().trim().length() > 150) {
+            log.error("❌ Validation failed: name too long");
+            throw new RuntimeException(
+                    "⚠️ Service name is too long. The name must not exceed 150 characters."
+            );
         }
 
-        log.debug("✅ Validation successful");
+        // ✅ Region
+        if (service.getRegion() == null) {
+            log.error("❌ Validation failed: missing region");
+            throw new RuntimeException(
+                    "⚠️ Region is required. Please select the region where this collaboration service will be offered."
+            );
+        }
+
+        // ✅ Budget
+        if (service.getRequestedBudget() == null) {
+            log.error("❌ Validation failed: missing budget");
+            throw new RuntimeException(
+                    "⚠️ Requested budget is required. Please specify the budget needed for this collaboration."
+            );
+        }
+        if (service.getRequestedBudget().compareTo(BigDecimal.ZERO) <= 0) {
+            log.error("❌ Validation failed: budget <= 0 ({})", service.getRequestedBudget());
+            throw new RuntimeException(
+                    "⚠️ Invalid budget amount: " + service.getRequestedBudget() + " TND. " +
+                            "The requested budget must be greater than 0 TND."
+            );
+        }
+
+        // ✅ Availability
+        if (service.getAvailability() == null) {
+            log.error("❌ Validation failed: missing availability");
+            throw new RuntimeException(
+                    "⚠️ Availability is required. Please indicate when this collaboration service will be available."
+            );
+        }
+
+        // ✅ Contact Person
+        if (service.getContactPerson() == null || service.getContactPerson().trim().isEmpty()) {
+            log.error("❌ Validation failed: missing contact person");
+            throw new RuntimeException(
+                    "⚠️ Contact person is required. Please provide the name of the responsible contact for this service."
+            );
+        }
+        if (service.getContactPerson().trim().length() < 3) {
+            log.error("❌ Validation failed: contact person name too short");
+            throw new RuntimeException(
+                    "⚠️ Contact person name is too short. The name must contain at least 3 characters."
+            );
+        }
+        if (service.getContactPerson().trim().length() > 100) {
+            log.error("❌ Validation failed: contact person name too long");
+            throw new RuntimeException(
+                    "⚠️ Contact person name is too long. The name must not exceed 100 characters."
+            );
+        }
+
+        log.debug("✅ All fields validated successfully");
     }
 
     // ========================================
@@ -1412,5 +1467,16 @@ public class CollaborationServiceService {
             service.getFavoritedByPartners().clear();
             log.info(" Favoris des partenaires économiques nettoyés");
         }
+    }
+    public List<CollaborationService> getServicesTakenByUser(Long userId, String userRole) {
+        List<ServiceAcquisition> myAcquisitions = serviceAcquisitionRepository
+                .findByAcquirerIdAndRoleAndActiveStatuses(userId);
+
+        return myAcquisitions.stream()
+                .filter(a -> "COLLABORATION".equals(a.getServiceType()))
+                .map(a -> repository.findById(a.getServiceId()))
+                .filter(java.util.Optional::isPresent)
+                .map(java.util.Optional::get)
+                .collect(java.util.stream.Collectors.toList());
     }
 }

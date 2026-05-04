@@ -6,6 +6,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tn.iset.investplatformpfe.Entity.*;
+import tn.iset.investplatformpfe.Entity.TouristService;
 import tn.iset.investplatformpfe.Repository.*;
 
 import java.time.LocalDateTime;
@@ -17,26 +18,24 @@ public class ServiceAcquisitionService {
 
     private static final Logger log = LoggerFactory.getLogger(ServiceAcquisitionService.class);
 
-    // ⏱️ Délais en heures
-    private static final int RESERVATION_EXPIRATION_HOURS = 48;
-    private static final int REMINDER_HOURS = 2;
+    private static final int REMINDER_AFTER_HOURS = 24;
 
     private final ServiceAcquisitionRepository acquisitionRepo;
     private final InvestmentServiceRepository investmentRepo;
     private final CollaborationServiceRepository collaborationRepo;
-    private final FlouciService flouciService;
+    private final TouristServiceRepository touristServiceRepo;        // ← ajout
     private final NotificationService notificationService;
 
     public ServiceAcquisitionService(
             ServiceAcquisitionRepository acquisitionRepo,
             InvestmentServiceRepository investmentRepo,
             CollaborationServiceRepository collaborationRepo,
-            FlouciService flouciService,
+            TouristServiceRepository touristServiceRepo,              // ← ajout
             NotificationService notificationService) {
         this.acquisitionRepo = acquisitionRepo;
         this.investmentRepo = investmentRepo;
         this.collaborationRepo = collaborationRepo;
-        this.flouciService = flouciService;
+        this.touristServiceRepo = touristServiceRepo;                 // ← ajout
         this.notificationService = notificationService;
     }
 
@@ -51,10 +50,19 @@ public class ServiceAcquisitionService {
         log.info("🔵 Demande acquisition - Type:{}, ServiceId:{}, Acquirer:{}",
                 serviceType, serviceId, acquirerEmail);
 
-        // ✅ Restriction des rôles autorisés
-        if (acquirerRole != Role.INVESTOR && acquirerRole != Role.INTERNATIONAL_COMPANY) {
-            throw new RuntimeException(
-                    "Only investors and international companies can acquire services.");
+        // ✅ Vérification du rôle selon le type de service
+        if ("TOURIST".equals(serviceType)) {
+            if (acquirerRole != Role.TOURIST) {
+                throw new RuntimeException(
+                        "Only tourists can acquire tourist services.");
+            }
+        } else {
+            if (acquirerRole != Role.INVESTOR
+                    && acquirerRole != Role.INTERNATIONAL_COMPANY
+                    && acquirerRole != Role.PARTNER) {
+                throw new RuntimeException(
+                        "Only investors, international companies and economic partners can acquire services.");
+            }
         }
 
         if (acquisitionRepo.existsByServiceIdAndServiceTypeAndPaymentStatus(
@@ -62,17 +70,23 @@ public class ServiceAcquisitionService {
             throw new RuntimeException("This service has already been acquired.");
         }
 
-        ServiceAcquisition existingReservation = acquisitionRepo
-                .findActiveReservation(serviceId, serviceType, LocalDateTime.now())
-                .orElse(null);
+        // ✅ Nettoyer les anciennes acquisitions CANCELLED ou PARTNER_REJECTED
+        List<ServiceAcquisition> oldCancelled = acquisitionRepo
+                .findByServiceIdAndServiceTypeAndAcquirerId(serviceId, serviceType, acquirerId);
 
-        if (existingReservation != null) {
-            throw new RuntimeException("This service is currently reserved. Please wait.");
-        }
+        oldCancelled.stream()
+                .filter(a -> a.getPaymentStatus() == PaymentStatus.CANCELLED
+                        || a.getPaymentStatus() == PaymentStatus.PARTNER_REJECTED)
+                .forEach(acquisitionRepo::delete);
 
         if (acquisitionRepo.existsByServiceIdAndServiceTypeAndPaymentStatus(
                 serviceId, serviceType, PaymentStatus.PENDING_PARTNER_APPROVAL)) {
             throw new RuntimeException("A request is already pending for this service.");
+        }
+
+        if (acquisitionRepo.existsByServiceIdAndServiceTypeAndPaymentStatus(
+                serviceId, serviceType, PaymentStatus.AWAITING_VALIDATION)) {
+            throw new RuntimeException("This service is awaiting partner validation.");
         }
 
         ServiceInfo serviceInfo = getServiceInfo(serviceType, serviceId);
@@ -80,8 +94,11 @@ public class ServiceAcquisitionService {
             throw new RuntimeException("Service not found.");
         }
 
+        log.info("🔍 Service status: {}", serviceInfo.status);
+
         if (serviceInfo.status != ServiceStatus.APPROVED) {
-            throw new RuntimeException("Service is not available for acquisition.");
+            log.error("❌ Service non disponible - Status: {}", serviceInfo.status);
+            throw new RuntimeException("Service is not available for acquisition. Status: " + serviceInfo.status);
         }
 
         markServiceAsPendingAcquisition(serviceType, serviceId);
@@ -116,24 +133,6 @@ public class ServiceAcquisitionService {
                 "status", "PENDING_PARTNER_APPROVAL"
         );
     }
-    // ========================================
-    // Marquer le service comme PENDING_ACQUISITION
-    // ========================================
-    private void markServiceAsPendingAcquisition(String serviceType, Long serviceId) {
-        if ("INVESTMENT".equals(serviceType)) {
-            InvestmentService service = investmentRepo.findById(serviceId)
-                    .orElseThrow(() -> new RuntimeException("Service not found"));
-            service.setStatus(ServiceStatus.PENDING_ACQUISITION);
-            investmentRepo.save(service);
-            log.info("✅ InvestmentService {} → PENDING_ACQUISITION", serviceId);
-        } else if ("COLLABORATION".equals(serviceType)) {
-            CollaborationService service = collaborationRepo.findById(serviceId)
-                    .orElseThrow(() -> new RuntimeException("Service not found"));
-            service.setStatus(ServiceStatus.PENDING_ACQUISITION);
-            collaborationRepo.save(service);
-            log.info("✅ CollaborationService {} → PENDING_ACQUISITION", serviceId);
-        }
-    }
 
     // ========================================
     // ÉTAPE 2A — Local Partner APPROUVE
@@ -151,46 +150,70 @@ public class ServiceAcquisitionService {
 
         markServiceAsReserved(acquisition);
 
-        LocalDateTime expiresAt = LocalDateTime.now().plusHours(RESERVATION_EXPIRATION_HOURS);
-        acquisition.setReservationExpiresAt(expiresAt);
-
-        acquisition.setPaymentStatus(PaymentStatus.AWAITING_PAYMENT);
+        acquisition.setPaymentStatus(PaymentStatus.AWAITING_VALIDATION);
+        acquisition.setApprovedAt(LocalDateTime.now());
         acquisitionRepo.save(acquisition);
 
-        Map<String, Object> flouciResponse = flouciService.initiatePayment(
-                acquisition.getAmount(), acquisition.getOrderId());
-
-        try {
-            Map<String, Object> result = (Map<String, Object>) flouciResponse.get("result");
-            if (result != null) {
-                acquisition.setFlouciPaymentId((String) result.get("payment_id"));
-                acquisition.setPaymentUrl((String) result.get("link"));
-                acquisitionRepo.save(acquisition);
-            }
-        } catch (Exception e) {
-            log.warn("⚠️ Parse Flouci échoué: {}", e.getMessage());
-        }
-
-        String paymentLink = acquisition.getPaymentUrl() != null ? acquisition.getPaymentUrl() : "";
-
         notificationService.createNotificationForUser(
-                "✅ Request approved — Please pay within " + RESERVATION_EXPIRATION_HOURS + " hours",
+                "✅ Request approved — Please proceed with payment",
                 "Your request for service '" + acquisition.getServiceName()
                         + "' has been approved by the local partner!\n\n"
-                        + "✅ The service is now RESERVED for you for "
-                        + RESERVATION_EXPIRATION_HOURS + " hours.\n\n"
-                        + "Please complete the payment before "
-                        + expiresAt.toLocalDate() + " " + expiresAt.toLocalTime()
-                        + " to finalize your acquisition.\n\n"
-                        + "Payment link: " + paymentLink,
+                        + "✅ The service is now RESERVED for you.\n\n"
+                        + "Please arrange your payment with the local partner and notify them once done. "
+                        + "The partner will then validate and finalize your acquisition.",
                 acquisition.getAcquirerRole(),
                 acquisition.getAcquirerId(),
                 acquisition.getServiceId()
         );
 
-        log.info("✅ Demande {} approuvée, service RESERVED jusqu'à {}, paiement initié",
-                acquisitionId, expiresAt);
-        return flouciResponse;
+        log.info("✅ Demande {} approuvée → AWAITING_VALIDATION, service RESERVED", acquisitionId);
+        return Map.of(
+                "message", "Request approved. User has been notified. Click 'Validate' once payment is received.",
+                "status", "AWAITING_VALIDATION"
+        );
+    }
+
+    // ========================================
+    // ÉTAPE 3 — Local Partner VALIDE
+    // ========================================
+    @Transactional
+    public Map<String, Object> partnerValidate(Long acquisitionId, Long partnerId) {
+        ServiceAcquisition acquisition = acquisitionRepo.findById(acquisitionId)
+                .orElseThrow(() -> new RuntimeException("Acquisition not found"));
+
+        if (!acquisition.getPartnerId().equals(partnerId))
+            throw new RuntimeException("Not authorized to validate this acquisition.");
+
+        if (acquisition.getPaymentStatus() != PaymentStatus.AWAITING_VALIDATION)
+            throw new RuntimeException("This acquisition is not awaiting validation. Status: "
+                    + acquisition.getPaymentStatus());
+
+        acquisition.setPaymentStatus(PaymentStatus.COMPLETED);
+        acquisition.setPaidAt(LocalDateTime.now());
+        acquisitionRepo.save(acquisition);
+
+        markServiceAsTaken(acquisition);
+
+        notificationService.createNotificationForUser(
+                "🎉 Service acquisition confirmed!",
+                "The local partner has validated your acquisition of service '"
+                        + acquisition.getServiceName() + "'.\n\n"
+                        + "✅ The service is now officially yours (TAKEN).\n"
+                        + "You can now access it from your dashboard.",
+                acquisition.getAcquirerRole(),
+                acquisition.getAcquirerId(),
+                acquisition.getServiceId()
+        );
+
+        log.info("✅ Acquisition {} validée par partner {} → COMPLETED, service TAKEN",
+                acquisitionId, partnerId);
+        return Map.of(
+                "message", "Service acquisition validated. Service is now TAKEN.",
+                "acquisitionId", acquisition.getId(),
+                "serviceType", acquisition.getServiceType(),
+                "serviceId", acquisition.getServiceId(),
+                "serviceName", acquisition.getServiceName()
+        );
     }
 
     // ========================================
@@ -211,7 +234,6 @@ public class ServiceAcquisitionService {
         acquisition.setRejectionReason(reason);
         acquisitionRepo.save(acquisition);
 
-        // ✅ Remettre le service en APPROVED
         releasePendingAcquisition(acquisition);
 
         notificationService.createNotificationForUser(
@@ -228,169 +250,109 @@ public class ServiceAcquisitionService {
     }
 
     // ========================================
-    // Libérer le service PENDING_ACQUISITION → APPROVED
+    // TÂCHE PLANIFIÉE — Reminder
     // ========================================
-    private void releasePendingAcquisition(ServiceAcquisition acquisition) {
-        String type = acquisition.getServiceType();
-        Long serviceId = acquisition.getServiceId();
-
-        if ("INVESTMENT".equals(type)) {
-            investmentRepo.findById(serviceId).ifPresent(s -> {
-                if (s.getStatus() == ServiceStatus.PENDING_ACQUISITION) {
-                    s.setStatus(ServiceStatus.APPROVED);
-                    investmentRepo.save(s);
-                    log.info("↩️ InvestmentService {} → APPROVED", serviceId);
-                }
-            });
-        } else if ("COLLABORATION".equals(type)) {
-            collaborationRepo.findById(serviceId).ifPresent(s -> {
-                if (s.getStatus() == ServiceStatus.PENDING_ACQUISITION) {
-                    s.setStatus(ServiceStatus.APPROVED);
-                    collaborationRepo.save(s);
-                    log.info("↩️ CollaborationService {} → APPROVED", serviceId);
-                }
-            });
-        }
-    }
-
-    // ========================================
-    // ÉTAPE 3 — Confirmer paiement
-    // ========================================
+    @Scheduled(cron = "0 0 * * * *")
     @Transactional
-    public Map<String, Object> confirmPayment(String paymentId, String orderId) {
-        log.info("✅ Confirmation paiement - PaymentId:{}, OrderId:{}", paymentId, orderId);
+    public void sendPaymentReminders() {
+        LocalDateTime reminderThreshold = LocalDateTime.now().minusHours(REMINDER_AFTER_HOURS);
 
-        ServiceAcquisition acquisition = null;
+        List<ServiceAcquisition> toRemind = acquisitionRepo
+                .findAwaitingValidationNeedingReminder(reminderThreshold);
 
-        if (paymentId != null && !paymentId.isEmpty())
-            acquisition = acquisitionRepo.findByFlouciPaymentId(paymentId).orElse(null);
-        if (acquisition == null && orderId != null)
-            acquisition = acquisitionRepo.findByOrderId(orderId).orElse(null);
-        if (acquisition == null)
-            throw new RuntimeException("Acquisition not found");
+        if (toRemind.isEmpty()) return;
 
-        if (acquisition.getReservationExpiresAt() != null &&
-                acquisition.getReservationExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new RuntimeException("Reservation expired. Please initiate a new request.");
-        }
+        log.info("⏰ {} reminder(s) à envoyer...", toRemind.size());
 
-        if (paymentId != null && !paymentId.startsWith("SIM_")) {
-            Map<String, Object> verification = flouciService.verifyPayment(paymentId);
-            Object resultObj = verification.get("result");
-            if (resultObj instanceof Map) {
-                String status = (String) ((Map<?, ?>) resultObj).get("status");
-                if (!"SUCCESS".equals(status)) {
-                    acquisition.setPaymentStatus(PaymentStatus.FAILED);
-                    acquisitionRepo.save(acquisition);
-                    releaseService(acquisition);
-                    throw new RuntimeException("Payment not successful: " + status);
-                }
-            }
-        }
-
-        acquisition.setPaymentStatus(PaymentStatus.COMPLETED);
-        acquisition.setPaidAt(LocalDateTime.now());
-        if (paymentId != null && acquisition.getFlouciPaymentId() == null)
-            acquisition.setFlouciPaymentId(paymentId);
-        acquisitionRepo.save(acquisition);
-
-        markServiceAsTaken(acquisition);
-        notifyPartnerPaymentReceived(acquisition);
-
-        log.info("✅ Paiement confirmé - Service {} → TAKEN, user:{}",
-                acquisition.getServiceId(), acquisition.getAcquirerId());
-
-        return Map.of(
-                "message", "Payment confirmed. You can now access the service.",
-                "acquisitionId", acquisition.getId(),
-                "serviceType", acquisition.getServiceType(),
-                "serviceId", acquisition.getServiceId(),
-                "serviceName", acquisition.getServiceName()
-        );
-    }
-
-    // ========================================
-    // TÂCHE PLANIFIÉE: Expiration des réservations
-    // ========================================
-    @Scheduled(cron = "0 * * * * *")
-    @Transactional
-    public void checkExpiredReservations() {
-        log.info("🔍 Vérification des réservations expirées...");
-
-        LocalDateTime now = LocalDateTime.now();
-        List<ServiceAcquisition> expired = acquisitionRepo
-                .findExpiredReservations(PaymentStatus.AWAITING_PAYMENT, now);
-
-        int expiredCount = 0;
-        for (ServiceAcquisition acquisition : expired) {
-            log.info("⏰ Réservation expirée - ID: {}, Service: {}", acquisition.getId(), acquisition.getServiceName());
-
-            releaseService(acquisition);
-            acquisition.setPaymentStatus(PaymentStatus.EXPIRED);
-            acquisitionRepo.save(acquisition);
-
+        for (ServiceAcquisition acquisition : toRemind) {
             notificationService.createNotificationForUser(
-                    "⏰ Reservation expired",
-                    "Your reservation for service '" + acquisition.getServiceName()
-                            + "' has expired because payment was not completed within "
-                            + RESERVATION_EXPIRATION_HOURS + " hours.\n\n"
-                            + "The service is now available again for others.",
+                    "⏰ Reminder — Please finalize your acquisition",
+                    "This is a reminder that your request for service '"
+                            + acquisition.getServiceName()
+                            + "' has been approved by the local partner.\n\n"
+                            + "✅ The service is still RESERVED for you.\n\n"
+                            + "Please contact the local partner to arrange your payment "
+                            + "and finalize the acquisition as soon as possible.",
                     acquisition.getAcquirerRole(),
                     acquisition.getAcquirerId(),
                     acquisition.getServiceId()
             );
 
-            notificationService.createNotificationForUser(
-                    "🔄 Service released",
-                    "The reservation for service '" + acquisition.getServiceName()
-                            + "' has expired. The service is now available again for others.",
-                    Role.LOCAL_PARTNER,
-                    acquisition.getPartnerId(),
-                    acquisition.getServiceId()
-            );
-
-            expiredCount++;
-        }
-
-        if (expiredCount > 0) {
-            log.info("✅ {} réservation(s) expirée(s) et libérée(s)", expiredCount);
-        }
-
-        LocalDateTime reminderStart = now.plusHours(REMINDER_HOURS);
-        LocalDateTime reminderEnd = reminderStart.plusMinutes(1);
-
-        List<ServiceAcquisition> needingReminder = acquisitionRepo
-                .findReservationsNeedingReminder(reminderStart, reminderEnd);
-
-        for (ServiceAcquisition acquisition : needingReminder) {
-            sendPaymentReminder(acquisition);
             acquisition.setReminderSent(true);
             acquisitionRepo.save(acquisition);
+
+            log.info("✅ Reminder envoyé → user:{}, acquisition:{}", acquisition.getAcquirerId(), acquisition.getId());
         }
     }
 
-    private void sendPaymentReminder(ServiceAcquisition acquisition) {
-        long hoursLeft = java.time.Duration.between(
-                LocalDateTime.now(),
-                acquisition.getReservationExpiresAt()).toHours();
+    // ========================================
+    // Annulation par le user
+    // ========================================
+    @Transactional
+    public Map<String, Object> cancelUserRequest(Long acquisitionId, Long acquirerId, String reason) {
+        log.info("🚫 User {} annule l'acquisition ID: {}", acquirerId, acquisitionId);
 
+        ServiceAcquisition acquisition = acquisitionRepo.findByIdAndAcquirerId(acquisitionId, acquirerId)
+                .orElseThrow(() -> new RuntimeException("Acquisition not found or not yours."));
+
+        PaymentStatus status = acquisition.getPaymentStatus();
+
+        if (status != PaymentStatus.PENDING_PARTNER_APPROVAL
+                && status != PaymentStatus.AWAITING_VALIDATION) {
+            throw new RuntimeException("Cannot cancel this request. Status: " + status);
+        }
+
+        // ✅ Remettre le service en APPROVED
+        if (status == PaymentStatus.PENDING_PARTNER_APPROVAL) {
+            releasePendingAcquisition(acquisition);
+        } else if (status == PaymentStatus.AWAITING_VALIDATION) {
+            releaseService(acquisition);
+        }
+
+        // ✅ Notifier le local partner
         notificationService.createNotificationForUser(
-                "⏰ Payment reminder - " + hoursLeft + " hours left",
-                "Your reservation for service '" + acquisition.getServiceName()
-                        + "' will expire in " + hoursLeft + " hours.\n\n"
-                        + "Please complete your payment before "
-                        + acquisition.getReservationExpiresAt().toLocalTime()
-                        + " to finalize your acquisition.\n\n"
-                        + "Payment link: " + acquisition.getPaymentUrl(),
-                acquisition.getAcquirerRole(),
-                acquisition.getAcquirerId(),
+                "🚫 Acquisition request cancelled",
+                "The user " + acquisition.getAcquirerEmail()
+                        + " has cancelled their request for service '"
+                        + acquisition.getServiceName() + "'.\n\nReason: " + reason
+                        + "\n\nThe service is now available again.",
+                Role.LOCAL_PARTNER,
+                acquisition.getPartnerId(),
                 acquisition.getServiceId()
         );
+
+        // ✅ Supprimer directement au lieu de mettre CANCELLED
+        acquisitionRepo.delete(acquisition);
+
+        log.info("🗑️ Acquisition {} supprimée - service remis en APPROVED", acquisitionId);
+        return Map.of(
+                "message", "Request cancelled and deleted successfully. The service is now available again.",
+                "acquisitionId", acquisitionId,
+                "reason", reason
+        );
+    }
+    // ========================================
+    // Helpers privés — status du service
+    // ========================================
+    private void markServiceAsPendingAcquisition(String serviceType, Long serviceId) {
+        if ("INVESTMENT".equals(serviceType)) {
+            InvestmentService service = investmentRepo.findById(serviceId)
+                    .orElseThrow(() -> new RuntimeException("Service not found"));
+            service.setStatus(ServiceStatus.PENDING_ACQUISITION);
+            investmentRepo.save(service);
+        } else if ("COLLABORATION".equals(serviceType)) {
+            CollaborationService service = collaborationRepo.findById(serviceId)
+                    .orElseThrow(() -> new RuntimeException("Service not found"));
+            service.setStatus(ServiceStatus.PENDING_ACQUISITION);
+            collaborationRepo.save(service);
+        } else if ("TOURIST".equals(serviceType)) {                   // ← ajout
+            TouristService service = touristServiceRepo.findById(serviceId)
+                    .orElseThrow(() -> new RuntimeException("Service not found"));
+            service.setStatus(ServiceStatus.PENDING_ACQUISITION);
+            touristServiceRepo.save(service);
+        }
     }
 
-    // ========================================
-    // Marquer le service comme RESERVÉ
-    // ========================================
     private void markServiceAsReserved(ServiceAcquisition acquisition) {
         String type = acquisition.getServiceType();
         Long serviceId = acquisition.getServiceId();
@@ -401,9 +363,8 @@ public class ServiceAcquisitionService {
             if (service.getStatus() == ServiceStatus.PENDING_ACQUISITION) {
                 service.setStatus(ServiceStatus.RESERVED);
                 investmentRepo.save(service);
-                log.info("✅ InvestmentService {} → RESERVED", serviceId);
             } else {
-                throw new RuntimeException("Service cannot be reserved. Current status: " + service.getStatus());
+                throw new RuntimeException("Service cannot be reserved. Status: " + service.getStatus());
             }
         } else if ("COLLABORATION".equals(type)) {
             CollaborationService service = collaborationRepo.findById(serviceId)
@@ -411,16 +372,21 @@ public class ServiceAcquisitionService {
             if (service.getStatus() == ServiceStatus.PENDING_ACQUISITION) {
                 service.setStatus(ServiceStatus.RESERVED);
                 collaborationRepo.save(service);
-                log.info("✅ CollaborationService {} → RESERVED", serviceId);
             } else {
-                throw new RuntimeException("Service cannot be reserved. Current status: " + service.getStatus());
+                throw new RuntimeException("Service cannot be reserved. Status: " + service.getStatus());
+            }
+        } else if ("TOURIST".equals(type)) {                          // ← ajout
+            TouristService service = touristServiceRepo.findById(serviceId)
+                    .orElseThrow(() -> new RuntimeException("Service not found"));
+            if (service.getStatus() == ServiceStatus.PENDING_ACQUISITION) {
+                service.setStatus(ServiceStatus.RESERVED);
+                touristServiceRepo.save(service);
+            } else {
+                throw new RuntimeException("Service cannot be reserved. Status: " + service.getStatus());
             }
         }
     }
 
-    // ========================================
-    // Marquer le service comme TAKEN
-    // ========================================
     private void markServiceAsTaken(ServiceAcquisition acquisition) {
         String type = acquisition.getServiceType();
         Long serviceId = acquisition.getServiceId();
@@ -437,12 +403,43 @@ public class ServiceAcquisitionService {
             service.setStatus(ServiceStatus.TAKEN);
             collaborationRepo.save(service);
             log.info("✅ CollaborationService {} → TAKEN", serviceId);
+        } else if ("TOURIST".equals(type)) {                          // ← ajout
+            TouristService service = touristServiceRepo.findById(serviceId)
+                    .orElseThrow(() -> new RuntimeException("Service not found"));
+            service.setStatus(ServiceStatus.TAKEN);
+            touristServiceRepo.save(service);
+            log.info("✅ TouristService {} → TAKEN", serviceId);
         }
     }
 
-    // ========================================
-    // Libérer le service (RESERVED → APPROVED)
-    // ========================================
+    private void releasePendingAcquisition(ServiceAcquisition acquisition) {
+        String type = acquisition.getServiceType();
+        Long serviceId = acquisition.getServiceId();
+
+        if ("INVESTMENT".equals(type)) {
+            investmentRepo.findById(serviceId).ifPresent(s -> {
+                if (s.getStatus() == ServiceStatus.PENDING_ACQUISITION) {
+                    s.setStatus(ServiceStatus.APPROVED);
+                    investmentRepo.save(s);
+                }
+            });
+        } else if ("COLLABORATION".equals(type)) {
+            collaborationRepo.findById(serviceId).ifPresent(s -> {
+                if (s.getStatus() == ServiceStatus.PENDING_ACQUISITION) {
+                    s.setStatus(ServiceStatus.APPROVED);
+                    collaborationRepo.save(s);
+                }
+            });
+        } else if ("TOURIST".equals(type)) {                          // ← ajout
+            touristServiceRepo.findById(serviceId).ifPresent(s -> {
+                if (s.getStatus() == ServiceStatus.PENDING_ACQUISITION) {
+                    s.setStatus(ServiceStatus.APPROVED);
+                    touristServiceRepo.save(s);
+                }
+            });
+        }
+    }
+
     private void releaseService(ServiceAcquisition acquisition) {
         String type = acquisition.getServiceType();
         Long serviceId = acquisition.getServiceId();
@@ -452,7 +449,6 @@ public class ServiceAcquisitionService {
                 if (s.getStatus() == ServiceStatus.RESERVED) {
                     s.setStatus(ServiceStatus.APPROVED);
                     investmentRepo.save(s);
-                    log.info("↩️ InvestmentService {} → APPROVED", serviceId);
                 }
             });
         } else if ("COLLABORATION".equals(type)) {
@@ -460,42 +456,16 @@ public class ServiceAcquisitionService {
                 if (s.getStatus() == ServiceStatus.RESERVED) {
                     s.setStatus(ServiceStatus.APPROVED);
                     collaborationRepo.save(s);
-                    log.info("↩️ CollaborationService {} → APPROVED", serviceId);
+                }
+            });
+        } else if ("TOURIST".equals(type)) {                          // ← ajout
+            touristServiceRepo.findById(serviceId).ifPresent(s -> {
+                if (s.getStatus() == ServiceStatus.RESERVED) {
+                    s.setStatus(ServiceStatus.APPROVED);
+                    touristServiceRepo.save(s);
                 }
             });
         }
-    }
-
-    // ========================================
-    // Annuler paiement
-    // ========================================
-    @Transactional
-    public void cancelPayment(String paymentId, String orderId) {
-        ServiceAcquisition acq = null;
-        if (paymentId != null)
-            acq = acquisitionRepo.findByFlouciPaymentId(paymentId).orElse(null);
-        if (acq == null && orderId != null)
-            acq = acquisitionRepo.findByOrderId(orderId).orElse(null);
-        if (acq != null && acq.getPaymentStatus() == PaymentStatus.AWAITING_PAYMENT) {
-            acq.setPaymentStatus(PaymentStatus.CANCELLED);
-            acquisitionRepo.save(acq);
-            releaseService(acq);
-            log.info("❌ Paiement annulé, service libéré");
-        }
-    }
-
-    private void notifyPartnerPaymentReceived(ServiceAcquisition acquisition) {
-        notificationService.createNotificationForUser(
-                "💰 Payment received",
-                acquisition.getAcquirerEmail()
-                        + " has completed the payment for your service '"
-                        + acquisition.getServiceName() + "'.\n"
-                        + "Amount: " + acquisition.getAmount() + " TND\n\n"
-                        + "The service is now officially acquired.",
-                Role.LOCAL_PARTNER,
-                acquisition.getPartnerId(),
-                acquisition.getServiceId()
-        );
     }
 
     private ServiceInfo getServiceInfo(String serviceType, Long serviceId) {
@@ -508,6 +478,10 @@ public class ServiceAcquisitionService {
                     .orElse(null);
         } else if ("COLLABORATION".equals(serviceType)) {
             return collaborationRepo.findById(serviceId)
+                    .map(s -> new ServiceInfo(s.getName(), s.getProvider().getId(), s.getStatus()))
+                    .orElse(null);
+        } else if ("TOURIST".equals(serviceType)) {                   // ← ajout
+            return touristServiceRepo.findById(serviceId)
                     .map(s -> new ServiceInfo(s.getName(), s.getProvider().getId(), s.getStatus()))
                     .orElse(null);
         }
@@ -529,29 +503,23 @@ public class ServiceAcquisitionService {
     // ========================================
     // API Publiques
     // ========================================
-
     public List<ServiceAcquisition> getPendingRequestsForPartner(Long partnerId) {
         return acquisitionRepo.findByPartnerIdAndPaymentStatus(
                 partnerId, PaymentStatus.PENDING_PARTNER_APPROVAL);
     }
 
+    public List<ServiceAcquisition> getAwaitingValidationForPartner(Long partnerId) {
+        return acquisitionRepo.findByPartnerIdAndPaymentStatus(
+                partnerId, PaymentStatus.AWAITING_VALIDATION);
+    }
+
     public List<ServiceAcquisition> getUserAcquisitions(Long acquirerId, Role role) {
-        log.info("📋 getUserAcquisitions (services payés) - acquirerId={}, role={}", acquirerId, role);
-
-        // Récupérer TOUTES les acquisitions
         List<ServiceAcquisition> all = acquisitionRepo.findAllByAcquirerIdAndRole(acquirerId, role);
-
-        // Filtrer pour garder uniquement les COMPLETED (payés)
-        List<ServiceAcquisition> completed = all.stream()
+        return all.stream()
                 .filter(a -> a.getPaymentStatus() == PaymentStatus.COMPLETED)
                 .collect(java.util.stream.Collectors.toList());
-
-        log.info("✅ {} services payés trouvés sur {} total", completed.size(), all.size());
-        completed.forEach(a -> log.info("  → serviceId={} | status={} | type={}",
-                a.getServiceId(), a.getPaymentStatus(), a.getServiceType()));
-
-        return completed;
     }
+
     public List<ServiceAcquisition> getAllUserAcquisitions(Long acquirerId, Role role) {
         return acquisitionRepo.findAllByAcquirerIdAndRole(acquirerId, role);
     }
@@ -580,54 +548,7 @@ public class ServiceAcquisitionService {
     }
 
     @Transactional
-    public Map<String, Object> cancelUserRequest(Long acquisitionId, Long acquirerId, String reason) {
-        log.info("🚫 User {} annule l'acquisition ID: {}", acquirerId, acquisitionId);
-
-        ServiceAcquisition acquisition = acquisitionRepo.findByIdAndAcquirerId(acquisitionId, acquirerId)
-                .orElseThrow(() -> new RuntimeException("Acquisition not found or not yours."));
-
-        PaymentStatus status = acquisition.getPaymentStatus();
-
-        if (status != PaymentStatus.PENDING_PARTNER_APPROVAL
-                && status != PaymentStatus.AWAITING_PAYMENT) {
-            throw new RuntimeException(
-                    "Cannot cancel this request. Status: " + status
-                            + ". Only PENDING_PARTNER_APPROVAL or AWAITING_PAYMENT can be cancelled.");
-        }
-
-        if (status == PaymentStatus.PENDING_PARTNER_APPROVAL) {
-            releasePendingAcquisition(acquisition);
-        } else if (status == PaymentStatus.AWAITING_PAYMENT) {
-            releaseService(acquisition);
-        }
-
-        acquisition.setPaymentStatus(PaymentStatus.CANCELLED);
-        acquisition.setRejectionReason("Cancelled by user: " + reason);
-        acquisitionRepo.save(acquisition);
-
-        notificationService.createNotificationForUser(
-                "🚫 Acquisition request cancelled",
-                "The user " + acquisition.getAcquirerEmail()
-                        + " has cancelled their request for service '"
-                        + acquisition.getServiceName() + "'.\n\nReason: " + reason
-                        + "\n\nThe service is now available again.",
-                Role.LOCAL_PARTNER,
-                acquisition.getPartnerId(),
-                acquisition.getServiceId()
-        );
-
-        log.info("🚫 Acquisition {} annulée par user {} - Raison: {}", acquisitionId, acquirerId, reason);
-
-        return Map.of(
-                "message", "Request cancelled successfully. The service is now available again.",
-                "acquisitionId", acquisitionId,
-                "reason", reason
-        );
-    }
-    @Transactional
     public void deleteAcquisition(Long acquisitionId) {
         acquisitionRepo.deleteById(acquisitionId);
     }
-
-
 }
