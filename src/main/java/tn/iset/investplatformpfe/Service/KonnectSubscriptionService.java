@@ -56,7 +56,7 @@ public class KonnectSubscriptionService {
         Map<String, Object> body = new HashMap<>();
         body.put("receiverWalletId", receiverWalletId);
         body.put("token", "TND");
-        body.put("amount", (int)(amountTND * 1000));
+        body.put("amount", (int) Math.round(amountTND * 1000));
         body.put("type", "immediate");
         body.put("description", "Abonnement mensuel - Accès Local Partners");
         body.put("acceptedPaymentMethods", List.of("wallet", "bank_card", "e-DINAR"));

@@ -23,19 +23,19 @@ public class ServiceAcquisitionService {
     private final ServiceAcquisitionRepository acquisitionRepo;
     private final InvestmentServiceRepository investmentRepo;
     private final CollaborationServiceRepository collaborationRepo;
-    private final TouristServiceRepository touristServiceRepo;        // ← ajout
+    private final TouristServiceRepository touristServiceRepo;
     private final NotificationService notificationService;
 
     public ServiceAcquisitionService(
             ServiceAcquisitionRepository acquisitionRepo,
             InvestmentServiceRepository investmentRepo,
             CollaborationServiceRepository collaborationRepo,
-            TouristServiceRepository touristServiceRepo,              // ← ajout
+            TouristServiceRepository touristServiceRepo,
             NotificationService notificationService) {
         this.acquisitionRepo = acquisitionRepo;
         this.investmentRepo = investmentRepo;
         this.collaborationRepo = collaborationRepo;
-        this.touristServiceRepo = touristServiceRepo;                 // ← ajout
+        this.touristServiceRepo = touristServiceRepo;
         this.notificationService = notificationService;
     }
 
@@ -234,6 +234,7 @@ public class ServiceAcquisitionService {
         acquisition.setRejectionReason(reason);
         acquisitionRepo.save(acquisition);
 
+        // ✅ Remet le service en APPROVED + notifie les utilisateurs concernés
         releasePendingAcquisition(acquisition);
 
         notificationService.createNotificationForUser(
@@ -302,7 +303,7 @@ public class ServiceAcquisitionService {
             throw new RuntimeException("Cannot cancel this request. Status: " + status);
         }
 
-        // ✅ Remettre le service en APPROVED
+        // ✅ Remettre le service en APPROVED + notifier les utilisateurs concernés
         if (status == PaymentStatus.PENDING_PARTNER_APPROVAL) {
             releasePendingAcquisition(acquisition);
         } else if (status == PaymentStatus.AWAITING_VALIDATION) {
@@ -331,6 +332,7 @@ public class ServiceAcquisitionService {
                 "reason", reason
         );
     }
+
     // ========================================
     // Helpers privés — status du service
     // ========================================
@@ -345,7 +347,7 @@ public class ServiceAcquisitionService {
                     .orElseThrow(() -> new RuntimeException("Service not found"));
             service.setStatus(ServiceStatus.PENDING_ACQUISITION);
             collaborationRepo.save(service);
-        } else if ("TOURIST".equals(serviceType)) {                   // ← ajout
+        } else if ("TOURIST".equals(serviceType)) {
             TouristService service = touristServiceRepo.findById(serviceId)
                     .orElseThrow(() -> new RuntimeException("Service not found"));
             service.setStatus(ServiceStatus.PENDING_ACQUISITION);
@@ -375,7 +377,7 @@ public class ServiceAcquisitionService {
             } else {
                 throw new RuntimeException("Service cannot be reserved. Status: " + service.getStatus());
             }
-        } else if ("TOURIST".equals(type)) {                          // ← ajout
+        } else if ("TOURIST".equals(type)) {
             TouristService service = touristServiceRepo.findById(serviceId)
                     .orElseThrow(() -> new RuntimeException("Service not found"));
             if (service.getStatus() == ServiceStatus.PENDING_ACQUISITION) {
@@ -403,7 +405,7 @@ public class ServiceAcquisitionService {
             service.setStatus(ServiceStatus.TAKEN);
             collaborationRepo.save(service);
             log.info("✅ CollaborationService {} → TAKEN", serviceId);
-        } else if ("TOURIST".equals(type)) {                          // ← ajout
+        } else if ("TOURIST".equals(type)) {
             TouristService service = touristServiceRepo.findById(serviceId)
                     .orElseThrow(() -> new RuntimeException("Service not found"));
             service.setStatus(ServiceStatus.TAKEN);
@@ -412,6 +414,10 @@ public class ServiceAcquisitionService {
         }
     }
 
+    // ========================================
+    // Helper privé — remet PENDING_ACQUISITION → APPROVED
+    // + notifie les utilisateurs concernés
+    // ========================================
     private void releasePendingAcquisition(ServiceAcquisition acquisition) {
         String type = acquisition.getServiceType();
         Long serviceId = acquisition.getServiceId();
@@ -421,6 +427,7 @@ public class ServiceAcquisitionService {
                 if (s.getStatus() == ServiceStatus.PENDING_ACQUISITION) {
                     s.setStatus(ServiceStatus.APPROVED);
                     investmentRepo.save(s);
+                    log.info("✅ InvestmentService {} → APPROVED (depuis PENDING_ACQUISITION)", serviceId);
                 }
             });
         } else if ("COLLABORATION".equals(type)) {
@@ -428,18 +435,27 @@ public class ServiceAcquisitionService {
                 if (s.getStatus() == ServiceStatus.PENDING_ACQUISITION) {
                     s.setStatus(ServiceStatus.APPROVED);
                     collaborationRepo.save(s);
+                    log.info("✅ CollaborationService {} → APPROVED (depuis PENDING_ACQUISITION)", serviceId);
                 }
             });
-        } else if ("TOURIST".equals(type)) {                          // ← ajout
+        } else if ("TOURIST".equals(type)) {
             touristServiceRepo.findById(serviceId).ifPresent(s -> {
                 if (s.getStatus() == ServiceStatus.PENDING_ACQUISITION) {
                     s.setStatus(ServiceStatus.APPROVED);
                     touristServiceRepo.save(s);
+                    log.info("✅ TouristService {} → APPROVED (depuis PENDING_ACQUISITION)", serviceId);
                 }
             });
         }
+
+        // ✅ Notifier les utilisateurs concernés que le service est à nouveau disponible
+        notifyUsersServiceAvailableAgain(type, serviceId, acquisition.getServiceName());
     }
 
+    // ========================================
+    // Helper privé — remet RESERVED → APPROVED
+    // + notifie les utilisateurs concernés
+    // ========================================
     private void releaseService(ServiceAcquisition acquisition) {
         String type = acquisition.getServiceType();
         Long serviceId = acquisition.getServiceId();
@@ -449,6 +465,7 @@ public class ServiceAcquisitionService {
                 if (s.getStatus() == ServiceStatus.RESERVED) {
                     s.setStatus(ServiceStatus.APPROVED);
                     investmentRepo.save(s);
+                    log.info("✅ InvestmentService {} → APPROVED (depuis RESERVED)", serviceId);
                 }
             });
         } else if ("COLLABORATION".equals(type)) {
@@ -456,15 +473,89 @@ public class ServiceAcquisitionService {
                 if (s.getStatus() == ServiceStatus.RESERVED) {
                     s.setStatus(ServiceStatus.APPROVED);
                     collaborationRepo.save(s);
+                    log.info("✅ CollaborationService {} → APPROVED (depuis RESERVED)", serviceId);
                 }
             });
-        } else if ("TOURIST".equals(type)) {                          // ← ajout
+        } else if ("TOURIST".equals(type)) {
             touristServiceRepo.findById(serviceId).ifPresent(s -> {
                 if (s.getStatus() == ServiceStatus.RESERVED) {
                     s.setStatus(ServiceStatus.APPROVED);
                     touristServiceRepo.save(s);
+                    log.info("✅ TouristService {} → APPROVED (depuis RESERVED)", serviceId);
                 }
             });
+        }
+
+        // ✅ Notifier les utilisateurs concernés que le service est à nouveau disponible
+        notifyUsersServiceAvailableAgain(type, serviceId, acquisition.getServiceName());
+    }
+
+    // ========================================
+    // Helper privé — envoi des notifications
+    // selon le type de service retourné APPROVED
+    //
+    // INVESTMENT   → INVESTOR + INTERNATIONAL_COMPANY
+    // COLLABORATION → PARTNER + INTERNATIONAL_COMPANY
+    // TOURIST      → TOURIST uniquement
+    // ========================================
+    private void notifyUsersServiceAvailableAgain(String serviceType, Long serviceId, String serviceName) {
+        log.info("🔔 Envoi notifications retour disponibilité - Type:{}, ServiceId:{}", serviceType, serviceId);
+
+        switch (serviceType) {
+
+            case "INVESTMENT" -> {
+                // Notifier les investisseurs
+                notificationService.createNotificationForRole(
+                        "✅ Investment Service Available Again",
+                        "The investment service '" + serviceName + "' is now available again. "
+                                + "You can submit a new acquisition request from your dashboard.",
+                        Role.INVESTOR,
+                        serviceId
+                );
+                // Notifier les sociétés internationales
+                notificationService.createNotificationForRole(
+                        "✅ Investment Service Available Again",
+                        "The investment service '" + serviceName + "' is now available again. "
+                                + "You can submit a new acquisition request from your dashboard.",
+                        Role.INTERNATIONAL_COMPANY,
+                        serviceId
+                );
+                log.info("🔔 Notifications envoyées → INVESTOR + INTERNATIONAL_COMPANY pour service INVESTMENT {}", serviceId);
+            }
+
+            case "COLLABORATION" -> {
+                // Notifier les partenaires économiques
+                notificationService.createNotificationForRole(
+                        "✅ Collaboration Service Available Again",
+                        "The collaboration service '" + serviceName + "' is now available again. "
+                                + "You can submit a new acquisition request from your dashboard.",
+                        Role.PARTNER,
+                        serviceId
+                );
+                // Notifier les sociétés internationales
+                notificationService.createNotificationForRole(
+                        "✅ Collaboration Service Available Again",
+                        "The collaboration service '" + serviceName + "' is now available again. "
+                                + "You can submit a new acquisition request from your dashboard.",
+                        Role.INTERNATIONAL_COMPANY,
+                        serviceId
+                );
+                log.info("🔔 Notifications envoyées → PARTNER + INTERNATIONAL_COMPANY pour service COLLABORATION {}", serviceId);
+            }
+
+            case "TOURIST" -> {
+                // Notifier uniquement les touristes
+                notificationService.createNotificationForRole(
+                        "✅ Tourist Service Available Again",
+                        "The tourist service '" + serviceName + "' is now available again. "
+                                + "You can submit a new acquisition request from your dashboard.",
+                        Role.TOURIST,
+                        serviceId
+                );
+                log.info("🔔 Notifications envoyées → TOURIST pour service TOURIST {}", serviceId);
+            }
+
+            default -> log.warn("⚠️ Type de service inconnu pour notification retour disponibilité: {}", serviceType);
         }
     }
 
@@ -480,7 +571,7 @@ public class ServiceAcquisitionService {
             return collaborationRepo.findById(serviceId)
                     .map(s -> new ServiceInfo(s.getName(), s.getProvider().getId(), s.getStatus()))
                     .orElse(null);
-        } else if ("TOURIST".equals(serviceType)) {                   // ← ajout
+        } else if ("TOURIST".equals(serviceType)) {
             return touristServiceRepo.findById(serviceId)
                     .map(s -> new ServiceInfo(s.getName(), s.getProvider().getId(), s.getStatus()))
                     .orElse(null);
@@ -545,6 +636,40 @@ public class ServiceAcquisitionService {
                 .map(a -> a.getAcquirerId().equals(acquirerId)
                         && a.getAcquirerRole() == role)
                 .orElse(false);
+    }
+    @Transactional
+    public void partnerRejectAndDelete(Long acquisitionId, Long partnerId, String reason) {
+        ServiceAcquisition acq = acquisitionRepo.findById(acquisitionId)
+                .orElseThrow(() -> new RuntimeException("Acquisition not found"));
+
+        if (!acq.getPartnerId().equals(partnerId))
+            throw new RuntimeException("Not authorized");
+
+        if (acq.getPaymentStatus() != PaymentStatus.AWAITING_VALIDATION)
+            throw new RuntimeException("Acquisition is not awaiting validation");
+
+        // ✅ Remettre le service RESERVED → APPROVED
+        releaseService(acq);
+
+        // ✅ Notifier l'acquéreur
+        notificationService.createNotificationForUser(
+                "❌ Payment rejected",
+                "Your payment for service '" + acq.getServiceName()
+                        + "' has been rejected by the local partner.\n\nReason: " + reason
+                        + "\n\nThe service is now available again.",
+                acq.getAcquirerRole(),
+                acq.getAcquirerId(),
+                acq.getServiceId()
+        );
+
+        // ✅ Suppression de la base de données
+        acquisitionRepo.delete(acq);
+
+        log.info("🗑️ Acquisition {} rejetée et supprimée - service remis en APPROVED", acquisitionId);
+    }
+    public List<ServiceAcquisition> getTakenServicesForPartner(Long partnerId) {
+        return acquisitionRepo.findByPartnerIdAndPaymentStatus(
+                partnerId, PaymentStatus.COMPLETED);
     }
 
     @Transactional

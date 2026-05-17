@@ -38,9 +38,11 @@ public class FavoriteTouristService {
         TouristService service = touristServiceRepository.findById(serviceId)
                 .orElseThrow(() -> new RuntimeException("Service touristique non trouvé avec l'ID: " + serviceId));
 
-        // Vérifier que le service est approuvé
+        // ✅ MESSAGE D'ERREUR EN ANGLAIS : status non APPROVED
         if (service.getStatus() != ServiceStatus.APPROVED) {
-            throw new RuntimeException("Seuls les services approuvés peuvent être ajoutés aux favoris");
+            throw new RuntimeException("This service is not available for favorites. " +
+                    "Only approved services can be added to favorites list. " +
+                    "[ Current status: " + service.getStatus() + " | serviceId: " + serviceId + " ]");
         }
 
         // Initialiser la liste si elle est null
@@ -62,7 +64,6 @@ public class FavoriteTouristService {
 
         return service;
     }
-
     /**
      * Retirer un service touristique des favoris d'un touriste
      */

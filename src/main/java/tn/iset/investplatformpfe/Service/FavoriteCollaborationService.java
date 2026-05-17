@@ -41,7 +41,7 @@ public class FavoriteCollaborationService {
 
         // Vérifier que le service est approuvé
         if (service.getStatus() != tn.iset.investplatformpfe.Entity.ServiceStatus.APPROVED) {
-            throw new RuntimeException("Seuls les services approuvés peuvent être ajoutés aux favoris");
+            throw new RuntimeException("Only approved services can be added to favorites list");
         }
 
         // Initialiser la liste si elle est null
@@ -118,7 +118,7 @@ public class FavoriteCollaborationService {
 
         // Vérifier que le service est approuvé
         if (service.getStatus() != tn.iset.investplatformpfe.Entity.ServiceStatus.APPROVED) {
-            throw new RuntimeException("Seuls les services approuvés peuvent être ajoutés aux favoris");
+            throw new RuntimeException("Only approved services can be added to favorites list");
         }
 
         // Initialiser la liste si elle est null
@@ -213,8 +213,7 @@ public class FavoriteCollaborationService {
                     economicPartnerRepository.save(partner);
                     partnerCount++;
                 }
-            }
-        }
+            }        }
         System.out.println("✅ Retiré des favoris de " + partnerCount + " partenaires économiques");
 
         System.out.println("✅ Service de collaboration " + serviceId + " retiré de tous les favoris avec succès");

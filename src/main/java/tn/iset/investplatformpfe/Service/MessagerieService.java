@@ -16,9 +16,13 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
+
 public class MessagerieService {
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(MessagerieService.class);
 
     // ✅ CHANGEMENT : FlouciSubscriptionService → KonnectSubscriptionService
+    private final NotificationService notificationService;
     private final KonnectSubscriptionService konnectSubscriptionService;
     private final MessageRepository messageRepo;
     private final ConversationRepository conversationRepo;
@@ -45,6 +49,7 @@ public class MessagerieService {
                              LocalPartnerRepository localPartnerRepo,
                              TouristRepository touristRepo,
                              SubscriptionRepository subscriptionRepository,
+                             NotificationService notificationService,
                              InternationalCompanyRepository internationalCompanyRepo) {
         this.messageRepo = messageRepo;
         this.conversationRepo = conversationRepo;
@@ -57,6 +62,7 @@ public class MessagerieService {
         this.contactPaymentRepository = contactPaymentRepository;
         this.subscriptionRepository = subscriptionRepository;
         this.konnectSubscriptionService = konnectSubscriptionService;
+        this.notificationService = notificationService;
     }
 
     // ========================================
@@ -98,6 +104,15 @@ public class MessagerieService {
     public Message sendMessageWithAttachments(String senderEmail, String recipientEmail,
                                               String content, String senderRole,
                                               MultipartFile[] attachments) throws IOException {
+        // ✅ Vérification abonnement si le destinataire est un Local Partner
+        if (localPartnerRepo.findByEmail(recipientEmail).isPresent()) {
+            boolean hasActiveSub = subscriptionRepository.hasActiveSubscription(
+                    senderEmail, LocalDateTime.now());
+            if (!hasActiveSub) {
+                throw new RuntimeException("Vous devez avoir un abonnement actif (40 TND/mois) pour contacter un Local Partner");
+            }
+        }
+
         Conversation conversation = findOrCreateConversation(senderEmail, recipientEmail, senderRole);
         if (conversation.getId() == null) {
             conversation = conversationRepo.saveAndFlush(conversation);
@@ -128,11 +143,16 @@ public class MessagerieService {
         updateConversationMetadata(conversation, messagePreview, senderEmail);
         return savedMessage;
     }
-
     // ========================================
     // SAUVEGARDER UN FICHIER
     // ========================================
     private MessageAttachment saveAttachment(MultipartFile file) throws IOException {
+        long MAX_SIZE = 10 * 1024 * 1024;
+        if (file.getSize() > MAX_SIZE) {
+            throw new RuntimeException("File too large: " + file.getOriginalFilename() +
+                    " (max 10 MB)");
+        }
+
         Path uploadPath = Paths.get(uploadDir);
         if (!Files.exists(uploadPath)) {
             Files.createDirectories(uploadPath);
@@ -433,5 +453,79 @@ public class MessagerieService {
                 subscriptionRepository.save(sub);
             }
         });
+    }
+
+    @Transactional
+    public void checkAndNotifyExpiringSubscriptions() {
+        LocalDateTime now     = LocalDateTime.now();
+        LocalDateTime in2Days = now.plusDays(2); // ✅ CORRIGÉ : 2 jours réels (pas plusMinutes)
+
+        // --- Avertissement J-2 (1 seule fois grâce à expirationNotified) ---
+        List<Subscription> expiringSoon = subscriptionRepository
+                .findExpiringSubscriptions(now, in2Days);
+
+        for (Subscription sub : expiringSoon) {
+            try {
+                String email    = sub.getSubscriberEmail();
+                Long   userId   = resolveUserId(email);
+                Role   userRole = resolveUserRole(email);
+
+                if (userId == null || userRole == null) {
+                    log.warn("Cannot resolve user for {}", email);
+                    continue;
+                }
+
+                notificationService.notifySubscriptionExpiringSoon(
+                        email, sub.getExpiresAt(), userId, userRole);
+
+                sub.setExpirationNotified(true); // ✅ ne sera plus notifié
+                subscriptionRepository.save(sub);
+
+            } catch (Exception e) {
+                log.error("Error notifying {}: {}", sub.getSubscriberEmail(), e.getMessage());
+            }
+        }
+
+        // --- Expirés → 1 seule notification grâce à expiredNotified ---
+        List<Subscription> justExpired = subscriptionRepository
+                .findJustExpiredSubscriptions(now);
+
+        for (Subscription sub : justExpired) {
+            try {
+                String email    = sub.getSubscriberEmail();
+                Long   userId   = resolveUserId(email);
+                Role   userRole = resolveUserRole(email);
+
+                if (userId != null && userRole != null) {
+                    notificationService.notifySubscriptionExpired(
+                            email, sub.getExpiresAt(), userId, userRole);
+                }
+
+                sub.setStatus(PaymentStatus.EXPIRED);
+                sub.setExpiredNotified(true); // ✅ AJOUTÉ : ne sera plus notifié
+                subscriptionRepository.save(sub);
+
+            } catch (Exception e) {
+                log.error("Error expiring {}: {}", sub.getSubscriberEmail(), e.getMessage());
+            }
+        }
+    }
+
+    private Long resolveUserId(String email) {
+        return investorRepo.findByEmail(email).map(Investor::getId)
+                .or(() -> localPartnerRepo.findByEmail(email).map(LocalPartner::getId))
+                .or(() -> partenaireEcoRepo.findByEmail(email).map(EconomicPartner::getId))
+                .or(() -> touristRepo.findByEmail(email).map(Tourist::getId))
+                .or(() -> internationalCompanyRepo.findByEmail(email).map(internationalcompany::getId))
+                .orElse(null);
+    }
+
+    private Role resolveUserRole(String email) {
+        if (investorRepo.findByEmail(email).isPresent())             return Role.INVESTOR;
+        if (localPartnerRepo.findByEmail(email).isPresent())         return Role.LOCAL_PARTNER;
+        if (partenaireEcoRepo.findByEmail(email).isPresent())        return Role.PARTNER;
+        if (touristRepo.findByEmail(email).isPresent())              return Role.TOURIST;
+        if (internationalCompanyRepo.findByEmail(email).isPresent()) return Role.INTERNATIONAL_COMPANY;
+        return null;
     }
 }

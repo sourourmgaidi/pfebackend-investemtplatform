@@ -1365,4 +1365,67 @@ public class NotificationService {
                 request.getPartner().getId(), request.getService().getId());
     }
 
+
+
+    // ================================================================
+// ADD THESE METHODS TO NotificationService.java
+// ================================================================
+
+    // ========================================
+// NOTIFICATION: Subscription expiring in 2 days (to subscriber)
+// ========================================
+    @Transactional
+    public void notifySubscriptionExpiringSoon(String subscriberEmail,
+                                               LocalDateTime expiresAt,
+                                               Long userId,
+                                               Role userRole) {
+        log.info("⚠️ Subscription expiring soon notification → {}", subscriberEmail);
+
+        String title = "⚠️ Your subscription expires in 2 days";
+        String message = String.format(
+                "Dear subscriber,\n\n" +
+                        "Your monthly subscription (40 TND/month) to contact Local Partners " +
+                        "will expire on %s.\n\n" +
+                        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+                        "⚠️ IMPORTANT — RENEWAL REQUIRED\n" +
+                        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n" +
+                        "After this date, you will no longer be able to send\n" +
+                        "messages to Local Partners until you renew.\n\n" +
+                        "To renew, go to the Messaging section and click\n" +
+                        "\"Subscribe — 40 TND/month\".\n\n" +
+                        "Best regards,\n" +
+                        "Investment Platform Team",
+                expiresAt.toLocalDate().toString()
+        );
+
+        createNotificationForUser(title, message, userRole, userId, null);
+        log.info("✅ Expiration notification sent to {}", subscriberEmail);
+    }
+
+    // ========================================
+// NOTIFICATION: Subscription expired (to subscriber)
+// ========================================
+    @Transactional
+    public void notifySubscriptionExpired(String subscriberEmail,
+                                          LocalDateTime expiredAt,
+                                          Long userId,
+                                          Role userRole) {
+        log.info("❌ Subscription expired notification → {}", subscriberEmail);
+
+        String title = "❌ Your subscription has expired";
+        String message = String.format(
+                "Dear subscriber,\n\n" +
+                        "Your subscription to contact Local Partners expired on %s.\n\n" +
+                        "You can no longer send messages to Local Partners.\n\n" +
+                        "To regain access, please renew your subscription (40 TND/month)\n" +
+                        "by visiting the Messaging section.\n\n" +
+                        "Best regards,\n" +
+                        "Investment Platform Team",
+                expiredAt.toLocalDate().toString()
+        );
+
+        createNotificationForUser(title, message, userRole, userId, null);
+        log.info("✅ Expired notification sent to {}", subscriberEmail);
+    }
+
 }

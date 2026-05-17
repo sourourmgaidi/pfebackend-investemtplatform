@@ -4,6 +4,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tn.iset.investplatformpfe.Entity.InvestmentService;
 import tn.iset.investplatformpfe.Entity.Investor;
+import tn.iset.investplatformpfe.Entity.ServiceStatus;
 import tn.iset.investplatformpfe.Entity.internationalcompany;
 import tn.iset.investplatformpfe.Repository.InvestmentServiceRepository;
 import tn.iset.investplatformpfe.Repository.InvestorRepository;
@@ -39,12 +40,17 @@ public class FavoriteInvestService {
         InvestmentService service = investmentServiceRepository.findById(serviceId)
                 .orElseThrow(() -> new RuntimeException("Service non trouvé avec l'ID: " + serviceId));
 
-        // Initialiser la liste si elle est null
+        // ✅ AJOUTER cette vérification
+        if (service.getStatus() != ServiceStatus.APPROVED) {
+            throw new RuntimeException("This service is not available for favorites. " +
+                    "Only approved services can be added to favorites list. " +
+                    "[ Current status: " + service.getStatus() + " | serviceId: " + serviceId + " ]");
+        }
+
         if (investor.getFavoriteServices() == null) {
             investor.setFavoriteServices(new java.util.ArrayList<>());
         }
 
-        // Vérifier si le service est déjà en favori
         boolean alreadyFavorite = investor.getFavoriteServices().stream()
                 .anyMatch(s -> s.getId().equals(serviceId));
 
@@ -58,6 +64,7 @@ public class FavoriteInvestService {
 
         return service;
     }
+
 
     @Transactional
     public void removeInvestorFavorite(Long investorId, Long serviceId) {
@@ -111,12 +118,17 @@ public class FavoriteInvestService {
         InvestmentService service = investmentServiceRepository.findById(serviceId)
                 .orElseThrow(() -> new RuntimeException("Service non trouvé avec l'ID: " + serviceId));
 
-        // Initialiser la liste si elle est null
+        // ✅ AJOUTER cette vérification
+        if (service.getStatus() != ServiceStatus.APPROVED) {
+            throw new RuntimeException("This service is not available for favorites. " +
+                    "Only approved services can be added to favorites list. " +
+                    "[ Current status: " + service.getStatus() + " | serviceId: " + serviceId + " ]");
+        }
+
         if (company.getFavoriteServices() == null) {
             company.setFavoriteServices(new java.util.ArrayList<>());
         }
 
-        // Vérifier si le service est déjà en favori
         boolean alreadyFavorite = company.getFavoriteServices().stream()
                 .anyMatch(s -> s.getId().equals(serviceId));
 

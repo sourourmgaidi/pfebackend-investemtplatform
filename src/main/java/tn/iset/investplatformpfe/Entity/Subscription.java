@@ -32,4 +32,20 @@ public class Subscription {
 
     private String transactionId;
     private String flouciPaymentId;
+    @Column(name = "expiration_notified")
+    private Boolean expirationNotified = false;
+    @Column(name = "expired_notified")
+    private Boolean expiredNotified = false;
+
+    public Boolean getExpiredNotified() { return expiredNotified; }
+    public void setExpiredNotified(Boolean expiredNotified) { this.expiredNotified = expiredNotified; }
+
+
+    public Boolean getExpirationNotified() {
+        return expirationNotified;
+    }
+
+    public void setExpirationNotified(Boolean expirationNotified) {
+        this.expirationNotified = expirationNotified;
+    }
 }

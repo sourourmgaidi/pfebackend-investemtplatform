@@ -415,4 +415,30 @@ public class ServiceAcquisitionController {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
+    @PostMapping("/partner/reject-validation/{acquisitionId}")
+    public ResponseEntity<?> rejectValidation(
+            @AuthenticationPrincipal Jwt jwt,
+            @PathVariable Long acquisitionId,
+            @RequestBody Map<String, String> body) {
+        try {
+            LocalPartner partner = getAuthenticatedPartner(jwt);
+            String reason = body.get("reason");
+            if (reason == null || reason.isBlank())
+                return ResponseEntity.badRequest().body(Map.of("error", "Reason is required"));
+            acquisitionService.partnerRejectAndDelete(acquisitionId, partner.getId(), reason);
+            return ResponseEntity.ok(Map.of("message", "Acquisition deleted."));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+    @GetMapping("/partner/taken-services")
+    public ResponseEntity<?> partnerTakenServices(@AuthenticationPrincipal Jwt jwt) {
+        try {
+            LocalPartner partner = getAuthenticatedPartner(jwt);
+            return ResponseEntity.ok(
+                    acquisitionService.getTakenServicesForPartner(partner.getId()));
+        } catch (Exception e) {
+            return ResponseEntity.status(401).body(Map.of("error", e.getMessage()));
+        }
+    }
 }
