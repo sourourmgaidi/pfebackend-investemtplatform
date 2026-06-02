@@ -1,5 +1,6 @@
 package tn.iset.investplatformpfe.Service;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import tn.iset.investplatformpfe.Entity.CollaborationService;
 import tn.iset.investplatformpfe.Entity.InvestmentService;
@@ -8,41 +9,34 @@ import tn.iset.investplatformpfe.Entity.TouristService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import tn.iset.investplatformpfe.Dto.RecommendationRequestDTO;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import java.time.Duration;
+
+import java.math.BigDecimal;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
-
 
 @Service
 public class AIEngine {
 
     private static final Logger log = LoggerFactory.getLogger(AIEngine.class);
-    private static final String OLLAMA_URL  = "http://localhost:11434/api/generate";
-    private static final String MODEL_NAME  = "phi3";
-    private static final int    TIMEOUT_SEC = 60;
 
-    private final HttpClient   httpClient = HttpClient.newHttpClient();
-    private final ObjectMapper mapper     = new ObjectMapper();
+    @Autowired
+    private GroqAiClient groqAiClient;
+
+    private final ObjectMapper mapper = new ObjectMapper();
 
     // ═════════════════════════════════════════════════════════════════
     //  POINT D'ENTRÉE PRINCIPAL
-    //  Pondération : 70% règles métier (déterministes) + 30% IA
+    //  Pondération : 70% règles métier + 30% IA
     // ═════════════════════════════════════════════════════════════════
     public AIScoreResult computeScoreWithAI(Object service, RecommendationRequestDTO dto) {
 
         int ruleScore = computeRuleScore(service, dto);
 
         try {
-            String prompt  = buildStrictPrompt(service, dto);
-            String rawResp = callOllama(prompt);
+            String prompt  = buildUserMessage(service, dto);
+            String rawResp = callGroq(prompt);
             System.out.println("AI RAW RESPONSE: " + rawResp);
 
             String cleanJson = extractJson(rawResp);
@@ -51,7 +45,6 @@ public class AIEngine {
             int    aiScore     = Math.max(0, Math.min(10, json.path("score").asInt(5)));
             String explanation = json.path("explanation").asText("Analyse IA indisponible.");
 
-            // ── Pondération : 70% règles + 30% IA ──────────────────
             int finalScore = (int) Math.round(0.70 * ruleScore + 0.30 * aiScore);
             finalScore     = Math.max(0, Math.min(10, finalScore));
 
@@ -64,31 +57,93 @@ public class AIEngine {
     }
 
     // ═════════════════════════════════════════════════════════════════
-    //  PROMPT STRICT — JSON uniquement
+    //  APPEL GROQ — prompt enrichi
     // ═════════════════════════════════════════════════════════════════
-    private String buildStrictPrompt(Object service, RecommendationRequestDTO dto) {
-        String userJson    = buildUserJson(dto);
-        String serviceDesc = describeService(service);
-
-        return "You are a JSON-only scoring engine. Respond with EXACTLY this format and nothing else:\n" +
-                "{\"score\": <integer 0-10>, \"explanation\": \"<one sentence in French>\"}\n\n" +
-                "Rules:\n" +
-                "- Output ONLY valid JSON. No markdown, no backticks, no extra text.\n" +
-                "- score must be an integer 0-10.\n" +
-                "- explanation: one sentence in French, no line breaks, no inner quotes.\n" +
-                "- Do NOT add any other keys.\n\n" +
-                "User: " + userJson + "\n" +
-                "Service: " + serviceDesc + "\n" +
-                "JSON:";
+    private String callGroq(String prompt) {
+        String systemPrompt =
+                "You are an expert investment and tourism advisor for Tunisia. " +
+                        "You score service-user compatibility from 0 to 10. " +
+                        "Scoring rules: " +
+                        "- 9-10: Perfect match on region, budget, domain AND availability. " +
+                        "- 7-8: Good match on 3 out of 4 criteria. " +
+                        "- 5-6: Partial match, 2 criteria aligned. " +
+                        "- 3-4: Weak match, only 1 criterion aligned. " +
+                        "- 0-2: No meaningful match. " +
+                        "Consider: budget compatibility, geographic proximity, " +
+                        "sector alignment, collaboration type fit, skill matching. " +
+                        "Respond with EXACTLY this JSON and nothing else: " +
+                        "{\"score\": <integer 0-10>, \"explanation\": \"<one sentence in French>\"}. " +
+                        "No markdown, no backticks, no extra text.";
+        return groqAiClient.chat(systemPrompt, prompt);
     }
 
-    // ── Profil utilisateur compact ────────────────────────────────
+    // ═════════════════════════════════════════════════════════════════
+    //  CONSTRUCTION DU MESSAGE UTILISATEUR — enrichi avec contexte
+    // ═════════════════════════════════════════════════════════════════
+    private String buildUserMessage(Object service, RecommendationRequestDTO dto) {
+        String userJson    = buildUserJson(dto);
+        String serviceDesc = describeService(service);
+        String context     = buildScoringContext(service, dto);
+
+        return "User profile: " + userJson +
+                "\nService to evaluate: " + serviceDesc +
+                "\nPre-computed rule score: " + computeRuleScore(service, dto) + "/10" +
+                "\nContext: " + context;
+    }
+
+    // ── Contexte additionnel pour guider l'IA ────────────────────────
+    private String buildScoringContext(Object service, RecommendationRequestDTO dto) {
+        StringBuilder ctx = new StringBuilder();
+
+        // Région match
+        if (dto.getRegionId() != null) {
+            boolean regionMatch = false;
+            if (service instanceof TouristService ts && ts.getRegion() != null)
+                regionMatch = ts.getRegion().getId().equals(dto.getRegionId());
+            if (service instanceof InvestmentService is && is.getRegion() != null)
+                regionMatch = is.getRegion().getId().equals(dto.getRegionId());
+            if (service instanceof CollaborationService cs && cs.getRegion() != null)
+                regionMatch = cs.getRegion().getId().equals(dto.getRegionId());
+            ctx.append(regionMatch ? "Region: MATCH. " : "Region: MISMATCH. ");
+        }
+
+        // Budget match
+        if (dto.getBudget() != null) {
+            BigDecimal svcPrice = null;
+            if (service instanceof TouristService ts)       svcPrice = ts.getPrice();
+            if (service instanceof InvestmentService is)    svcPrice = is.getMinimumAmount() != null ? is.getMinimumAmount() : is.getTotalAmount();
+            if (service instanceof CollaborationService cs) svcPrice = cs.getRequestedBudget();
+
+            if (svcPrice != null) {
+                double ratio = dto.getBudget().doubleValue() / svcPrice.doubleValue();
+                if (ratio >= 1.0)      ctx.append("Budget: COMFORTABLE. ");
+                else if (ratio >= 0.8) ctx.append("Budget: TIGHT. ");
+                else                   ctx.append("Budget: INSUFFICIENT. ");
+            }
+        }
+
+        // Skills match pour collaboration
+        if (service instanceof CollaborationService cs &&
+                dto.getOfferedSkills() != null && !dto.getOfferedSkills().isEmpty() &&
+                cs.getRequiredSkills() != null && !cs.getRequiredSkills().isEmpty()) {
+            long matches = cs.getRequiredSkills().stream()
+                    .filter(req -> dto.getOfferedSkills().stream()
+                            .anyMatch(offered -> offered.trim().equalsIgnoreCase(req.trim())))
+                    .count();
+            int pct = (int) Math.round((double) matches / cs.getRequiredSkills().size() * 100);
+            ctx.append("Skills match: ").append(pct).append("%. ");
+        }
+
+        return ctx.toString();
+    }
+
+    // ── Profil utilisateur compact ────────────────────────────────────
     private String buildUserJson(RecommendationRequestDTO dto) {
         StringBuilder sb = new StringBuilder("{");
         boolean first = true;
 
         first = appendStr(sb, "type",        dto.getUserType() != null ? dto.getUserType().name() : null, first);
-        first = appendNum(sb, "budget",      dto.getBudget() != null   ? dto.getBudget().doubleValue() : null, first);
+        first = appendNum(sb, "budget",      dto.getBudget() != null ? dto.getBudget().doubleValue() : null, first);
         first = appendNum(sb, "regionId",    dto.getRegionId() != null ? dto.getRegionId().doubleValue() : null, first);
         first = appendStr(sb, "domain",      dto.getActivityDomain() != null ? dto.getActivityDomain().name() : null, first);
         first = appendStr(sb, "sector",      sanitize(dto.getPreferredSector()), first);
@@ -103,26 +158,32 @@ public class AIEngine {
         first = appendStr(sb, "goal2",       sanitize(dto.getStrategicGoal()), first);
         first = appendStr(sb, "skills",      dto.getOfferedSkills() != null ? String.join(",", dto.getOfferedSkills()) : null, first);
         first = appendStr(sb, "partnerCrit", truncate(sanitize(dto.getPartnerCriteria()), 100), first);
+        first = appendNum(sb, "groupSize",   dto.getGroupSize() != null ? dto.getGroupSize().doubleValue() : null, first);
+        first = appendNum(sb, "prefDuration",dto.getPreferredDurationHours() != null ? dto.getPreferredDurationHours().doubleValue() : null, first);
 
         sb.append("}");
         return sb.toString();
     }
 
-    // ── Description service compact ──────────────────────────────
+    // ── Description service compact ───────────────────────────────────
     private String describeService(Object service) {
         if (service instanceof TouristService ts) {
             return String.format(
-                    "{\"type\":\"TOURIST\",\"name\":\"%s\",\"price\":%s,\"region\":\"%s\",\"audience\":\"%s\",\"availability\":\"%s\"}",
+                    "{\"type\":\"TOURIST\",\"name\":\"%s\",\"price\":%s,\"region\":\"%s\"," +
+                            "\"audience\":\"%s\",\"availability\":\"%s\",\"durationHours\":%s,\"maxCapacity\":%s}",
                     sanitize(ts.getName()),
                     ts.getPrice() != null ? ts.getPrice().longValue() : "null",
                     ts.getRegion() != null ? sanitize(ts.getRegion().getName()) : "N/A",
                     ts.getTargetAudience() != null ? ts.getTargetAudience().name() : "N/A",
-                    ts.getAvailability() != null ? ts.getAvailability().name() : "N/A"
+                    ts.getAvailability() != null ? ts.getAvailability().name() : "N/A",
+                    ts.getDurationHours() != null ? ts.getDurationHours() : "null",
+                    ts.getMaxCapacity() != null ? ts.getMaxCapacity() : "null"
             );
         }
         if (service instanceof InvestmentService is) {
             return String.format(
-                    "{\"type\":\"INVESTMENT\",\"name\":\"%s\",\"minAmount\":%s,\"totalAmount\":%s,\"sector\":\"%s\",\"region\":\"%s\",\"availability\":\"%s\",\"projectDuration\":\"%s\"}",
+                    "{\"type\":\"INVESTMENT\",\"name\":\"%s\",\"minAmount\":%s,\"totalAmount\":%s," +
+                            "\"sector\":\"%s\",\"region\":\"%s\",\"availability\":\"%s\",\"projectDuration\":\"%s\"}",
                     sanitize(is.getTitle() != null ? is.getTitle() : is.getName()),
                     is.getMinimumAmount() != null ? is.getMinimumAmount().longValue() : "null",
                     is.getTotalAmount() != null ? is.getTotalAmount().longValue() : "null",
@@ -134,11 +195,12 @@ public class AIEngine {
         }
         if (service instanceof CollaborationService cs) {
             String skills = cs.getRequiredSkills() != null
-                    ? cs.getRequiredSkills().stream().limit(5).toList().toString()
-                    .replace("[", "").replace("]", "")
+                    ? cs.getRequiredSkills().stream().limit(5).toList()
+                    .toString().replace("[", "").replace("]", "")
                     : "";
             return String.format(
-                    "{\"type\":\"COLLABORATION\",\"name\":\"%s\",\"domain\":\"%s\",\"collab\":\"%s\",\"skills\":\"%s\",\"region\":\"%s\",\"budget\":%s,\"availability\":\"%s\"}",
+                    "{\"type\":\"COLLABORATION\",\"name\":\"%s\",\"domain\":\"%s\",\"collab\":\"%s\"," +
+                            "\"skills\":\"%s\",\"region\":\"%s\",\"budget\":%s,\"availability\":\"%s\"}",
                     sanitize(cs.getName()),
                     cs.getActivityDomain() != null ? cs.getActivityDomain().name() : "N/A",
                     cs.getCollaborationType() != null ? cs.getCollaborationType().name() : "N/A",
@@ -149,33 +211,6 @@ public class AIEngine {
             );
         }
         return "{\"type\":\"UNKNOWN\"}";
-    }
-
-    // ═════════════════════════════════════════════════════════════════
-    //  APPEL HTTP OLLAMA
-    // ═════════════════════════════════════════════════════════════════
-    private String callOllama(String prompt) throws Exception {
-        Map<String, Object> body = Map.of(
-                "model",  MODEL_NAME,
-                "prompt", prompt,
-                "stream", false,
-                "options", Map.of(
-                        "temperature", 0.1,
-                        "num_predict", 150,
-                        "stop", new String[]{"\n\n", "```", "User:", "Service:"}
-                )
-        );
-
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(OLLAMA_URL))
-                .header("Content-Type", "application/json")
-                .timeout(Duration.ofSeconds(TIMEOUT_SEC))
-                .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(body)))
-                .build();
-
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        JsonNode node = mapper.readTree(response.body());
-        return node.path("response").asText("");
     }
 
     // ═════════════════════════════════════════════════════════════════
@@ -257,210 +292,149 @@ public class AIEngine {
     }
 
     // ═════════════════════════════════════════════════════════════════
-    //  SCORE PAR RÈGLES MÉTIER — VERSION AMÉLIORÉE
-    //
-    //  Principe : chaque critère rempli par l'utilisateur DOIT être
-    //  pris en compte avec un poids significatif.
-    //  Score sur 100 points puis ramené sur 10.
+    //  SCORE PAR RÈGLES MÉTIER
     // ═════════════════════════════════════════════════════════════════
     public int computeRuleScore(Object service, RecommendationRequestDTO dto) {
-
-        // ── SERVICE TOURISTIQUE ──────────────────────────────────────
-        if (service instanceof TouristService ts) {
-            return scoreTourist(ts, dto);
-        }
-
-        // ── OPPORTUNITÉ D'INVESTISSEMENT ─────────────────────────────
-        if (service instanceof InvestmentService is) {
-            return scoreInvestment(is, dto);
-        }
-
-        // ── SERVICE DE COLLABORATION ─────────────────────────────────
-        if (service instanceof CollaborationService cs) {
-            return scoreCollaboration(cs, dto);
-        }
-
+        if (service instanceof TouristService ts)       return scoreTourist(ts, dto);
+        if (service instanceof InvestmentService is)    return scoreInvestment(is, dto);
+        if (service instanceof CollaborationService cs) return scoreCollaboration(cs, dto);
         return 0;
     }
 
-    // ─────────────────────────────────────────────────────────────────
-    //  TOURISTE  — 100 pts max
-    // ─────────────────────────────────────────────────────────────────
     private int scoreTourist(TouristService ts, RecommendationRequestDTO dto) {
+        int pts = 0, max = 0;
 
-        int pts = 0;
-        int max = 0;
-
-        // Région (poids fort) — 30 pts
-        if (dto.getRegionId() != null) {
+        // Région — 30 pts
+        if (dto.getRegionId() != null && ts.getRegion() != null) {
             max += 30;
-            if (ts.getRegion() != null && ts.getRegion().getId().equals(dto.getRegionId())) {
-                pts += 30;
-            }
+            if (ts.getRegion().getId().equals(dto.getRegionId())) pts += 30;
         }
 
-        // Budget (poids fort) — 25 pts
+        // Budget — 25 pts avec dégradé
         if (dto.getBudget() != null && ts.getPrice() != null) {
             max += 25;
-            if (ts.getPrice().compareTo(dto.getBudget()) <= 0) {
-                pts += 25;
-            } else {
-                // Pénalité progressive si légèrement au-dessus du budget
-                double ratio = dto.getBudget().doubleValue() / ts.getPrice().doubleValue();
-                if (ratio >= 0.8) pts += 10; // 20% au-dessus → partial
-            }
+            double ratio = dto.getBudget().doubleValue() / ts.getPrice().doubleValue();
+            if (ratio >= 1.0)      pts += 25;
+            else if (ratio >= 0.8) pts += 15;
+            else if (ratio >= 0.6) pts += 8;
         }
 
-        // Audience cible — 25 pts
+        // Audience — 25 pts
         if (dto.getTargetAudience() != null && ts.getTargetAudience() != null) {
             max += 25;
-            if (ts.getTargetAudience().name().equalsIgnoreCase(dto.getTargetAudience().name())) {
-                pts += 25;
-            }
+            if (ts.getTargetAudience().name().equalsIgnoreCase(
+                    dto.getTargetAudience().name())) pts += 25;
         }
 
         // Disponibilité — 15 pts
         if (dto.getAvailability() != null && ts.getAvailability() != null) {
             max += 15;
-            if (ts.getAvailability().name().equalsIgnoreCase(dto.getAvailability())) {
-                pts += 15;
-            }
+            if (ts.getAvailability().name().equalsIgnoreCase(dto.getAvailability())) pts += 15;
         }
 
-        // Domaine d'activité — 5 pts (bonus)
-        /*if (dto.getActivityDomain() != null && ts.getActivityDomain() != null) {
-            max += 5;
-            if (ts.getActivityDomain().name().equalsIgnoreCase(dto.getActivityDomain().name())) {
-                pts += 5;
-            }
-        }*/
+        // Durée souhaitée — 10 pts
+        if (dto.getPreferredDurationHours() != null && ts.getDurationHours() != null) {
+            max += 10;
+            int diff = Math.abs(dto.getPreferredDurationHours() - ts.getDurationHours());
+            if (diff == 0)      pts += 10;
+            else if (diff <= 2) pts += 6;
+            else if (diff <= 5) pts += 3;
+        }
 
-        // Si aucun critère de filtrage fourni → score de base 5
+        // Capacité groupe — 10 pts
+        if (dto.getGroupSize() != null && ts.getMaxCapacity() != null) {
+            max += 10;
+            if (ts.getMaxCapacity() >= dto.getGroupSize()) pts += 10;
+        }
+
         if (max == 0) return 5;
-
-        // Ramener sur 10 (proportionnellement aux critères fournis)
-        double ratio = (double) pts / max;
-        return (int) Math.round(ratio * 10);
+        return (int) Math.round((double) pts / max * 10);
     }
 
-    // ─────────────────────────────────────────────────────────────────
-    //  INVESTISSEMENT  — 100 pts max
-    // ─────────────────────────────────────────────────────────────────
     private int scoreInvestment(InvestmentService is, RecommendationRequestDTO dto) {
+        int pts = 0, max = 0;
 
-        int pts = 0;
-        int max = 0;
-
-        // Région (poids fort) — 30 pts
+        // Région — 30 pts
         if (dto.getRegionId() != null) {
             max += 30;
-            if (is.getRegion() != null && is.getRegion().getId().equals(dto.getRegionId())) {
-                pts += 30;
-            }
+            if (is.getRegion() != null && is.getRegion().getId().equals(dto.getRegionId())) pts += 30;
         }
 
         // Budget — 25 pts
         if (dto.getBudget() != null) {
             max += 25;
-            java.math.BigDecimal minAmt = is.getMinimumAmount();
-            if (minAmt == null) minAmt = is.getTotalAmount();
-
+            BigDecimal minAmt = is.getMinimumAmount() != null ? is.getMinimumAmount() : is.getTotalAmount();
             if (minAmt != null) {
-                if (minAmt.compareTo(dto.getBudget()) <= 0) {
-                    pts += 25; // Budget suffisant
-                } else {
-                    // Pénalité progressive
+                if (minAmt.compareTo(dto.getBudget()) <= 0) pts += 25;
+                else {
                     double ratio = dto.getBudget().doubleValue() / minAmt.doubleValue();
                     if (ratio >= 0.8) pts += 12;
                     else if (ratio >= 0.5) pts += 5;
                 }
-            } else {
-                pts += 15; // Pas de montant minimum → neutre favorable
-            }
+            } else pts += 15;
         }
 
-        // Domaine d'activité / Secteur économique — 20 pts
+        // Domaine d'activité — 20 pts
         if (dto.getActivityDomain() != null) {
             max += 20;
             if (is.getEconomicSector() != null) {
                 String sectorName = is.getEconomicSector().getName().toUpperCase();
                 String domain     = dto.getActivityDomain().name().toUpperCase();
                 if (sectorName.contains(domain) || domain.contains(sectorName)
-                        || sectorDomainMatch(sectorName, domain)) {
-                    pts += 20;
-                }
+                        || sectorDomainMatch(sectorName, domain)) pts += 20;
             }
         }
 
-        // Secteur préféré (texte libre) — 10 pts bonus
+        // Secteur préféré — 10 pts
         if (dto.getPreferredSector() != null && !dto.getPreferredSector().isBlank()) {
             max += 10;
             if (is.getEconomicSector() != null) {
                 String sectorName = is.getEconomicSector().getName().toLowerCase();
                 String preferred  = dto.getPreferredSector().toLowerCase();
-                if (sectorName.contains(preferred) || preferred.contains(sectorName)) {
-                    pts += 10;
-                }
+                if (sectorName.contains(preferred) || preferred.contains(sectorName)) pts += 10;
             }
         }
 
         // Disponibilité — 10 pts
         if (dto.getAvailability() != null && is.getAvailability() != null) {
             max += 10;
-            if (is.getAvailability().name().equalsIgnoreCase(dto.getAvailability())) {
-                pts += 10;
-            }
+            if (is.getAvailability().name().equalsIgnoreCase(dto.getAvailability())) pts += 10;
         }
 
         // Horizon d'investissement — 5 pts
         if (dto.getInvestmentHorizon() != null && !dto.getInvestmentHorizon().isBlank()) {
             max += 5;
             if (is.getProjectDuration() != null) {
-                if (horizonMatchesDuration(dto.getInvestmentHorizon(), is.getProjectDuration())) {
-                    pts += 5;
-                }
-            } else {
-                pts += 2; // Durée non renseignée → neutre
-            }
+                if (horizonMatchesDuration(dto.getInvestmentHorizon(), is.getProjectDuration())) pts += 5;
+            } else pts += 2;
         }
 
-        // Bonus : Société Internationale — 5 pts
+        // Bonus société internationale — 5 pts
         if (dto.getUserType() != null && dto.getUserType().name().equals("INTERNATIONAL_COMPANY")) {
-            max += 5;
-            pts += 5;
+            max += 5; pts += 5;
         }
 
         if (max == 0) return 5;
-        double ratio = (double) pts / max;
-        return (int) Math.round(ratio * 10);
+        return (int) Math.round((double) pts / max * 10);
     }
 
-    // ─────────────────────────────────────────────────────────────────
-    //  COLLABORATION  — 100 pts max
-    // ─────────────────────────────────────────────────────────────────
     private int scoreCollaboration(CollaborationService cs, RecommendationRequestDTO dto) {
+        int pts = 0, max = 0;
 
-        int pts = 0;
-        int max = 0;
-
-        // Région (poids fort) — 25 pts
+        // Région — 25 pts
         if (dto.getRegionId() != null) {
             max += 25;
-            if (cs.getRegion() != null && cs.getRegion().getId().equals(dto.getRegionId())) {
-                pts += 25;
-            }
+            if (cs.getRegion() != null && cs.getRegion().getId().equals(dto.getRegionId())) pts += 25;
         }
 
         // Domaine d'activité — 25 pts
         if (dto.getActivityDomain() != null) {
             max += 25;
-            if (cs.getActivityDomain() != null
-                    && cs.getActivityDomain().name().equalsIgnoreCase(dto.getActivityDomain().name())) {
-                pts += 25;
-            }
+            if (cs.getActivityDomain() != null &&
+                    cs.getActivityDomain().name().equalsIgnoreCase(dto.getActivityDomain().name())) pts += 25;
         }
 
-        // Compétences requises ↔ offertes — jusqu'à 20 pts
+        // Compétences offertes vs requises — 20 pts
         if (dto.getOfferedSkills() != null && !dto.getOfferedSkills().isEmpty()
                 && cs.getRequiredSkills() != null && !cs.getRequiredSkills().isEmpty()) {
             max += 20;
@@ -468,94 +442,70 @@ public class AIEngine {
                     .filter(required -> dto.getOfferedSkills().stream()
                             .anyMatch(offered -> offered.trim().equalsIgnoreCase(required.trim())))
                     .count();
-            // Proportionnel au nombre de compétences requises
-            double matchRatio = (double) matches / cs.getRequiredSkills().size();
-            pts += (int) Math.round(matchRatio * 20);
+            pts += (int) Math.round((double) matches / cs.getRequiredSkills().size() * 20);
         }
 
         // Type de collaboration — 15 pts
         if (dto.getCollaborationType() != null && !dto.getCollaborationType().isBlank()) {
             max += 15;
-            if (cs.getCollaborationType() != null
-                    && cs.getCollaborationType().name().equalsIgnoreCase(dto.getCollaborationType())) {
-                pts += 15;
-            }
+            if (cs.getCollaborationType() != null &&
+                    cs.getCollaborationType().name().equalsIgnoreCase(dto.getCollaborationType())) pts += 15;
         }
 
         // Disponibilité — 10 pts
         if (dto.getAvailability() != null && cs.getAvailability() != null) {
             max += 10;
-            if (cs.getAvailability().name().equalsIgnoreCase(dto.getAvailability())) {
-                pts += 10;
-            }
+            if (cs.getAvailability().name().equalsIgnoreCase(dto.getAvailability())) pts += 10;
         }
 
         // Budget — 5 pts
         if (dto.getBudget() != null && cs.getRequestedBudget() != null) {
             max += 5;
-            if (cs.getRequestedBudget().compareTo(dto.getBudget()) <= 0) {
-                pts += 5;
-            }
+            if (cs.getRequestedBudget().compareTo(dto.getBudget()) <= 0) pts += 5;
         }
 
         if (max == 0) return 5;
-        double ratio = (double) pts / max;
-        return (int) Math.round(ratio * 10);
+        return (int) Math.round((double) pts / max * 10);
     }
 
     // ═════════════════════════════════════════════════════════════════
-    //  HELPERS — correspondances métier
+    //  HELPERS
     // ═════════════════════════════════════════════════════════════════
+    // Méthode publique appelée par RecommendationService pour le filtrage domaine
+    public boolean sectorDomainMatchPublic(String sectorUpper, String domainUpper) {
+        return sectorDomainMatch(sectorUpper, domainUpper);
+    }
 
-    /**
-     * Correspondance secteur économique ↔ domaine d'activité
-     * (les noms en base peuvent différer des enum front)
-     */
     private boolean sectorDomainMatch(String sectorUpper, String domainUpper) {
         return switch (domainUpper) {
-            case "TECHNOLOGY", "IT"        -> sectorUpper.contains("TECH") || sectorUpper.contains("INFORMAT") || sectorUpper.contains("DIGIT") || sectorUpper.contains("LOGIC");
-            case "AGRICULTURE", "AGRI_FOOD"-> sectorUpper.contains("AGRI") || sectorUpper.contains("AGRO") || sectorUpper.contains("ALIMENTAIRE");
-            case "TOURISM", "HOTEL"        -> sectorUpper.contains("TOUR") || sectorUpper.contains("HOTEL") || sectorUpper.contains("HOSPITAL");
-            case "INDUSTRY","MANUFACTURING"-> sectorUpper.contains("INDUS") || sectorUpper.contains("MANUFACTUR") || sectorUpper.contains("FABRI");
-            case "ENERGY","RENEWABLE_ENERGY"-> sectorUpper.contains("ENERG") || sectorUpper.contains("SOLAIRE") || sectorUpper.contains("RENOUV");
-            case "FINANCE"                 -> sectorUpper.contains("FINANC") || sectorUpper.contains("BANQUE") || sectorUpper.contains("ASSUR");
-            case "HEALTH"                  -> sectorUpper.contains("SANT") || sectorUpper.contains("MEDICAL") || sectorUpper.contains("PHARMA");
-            case "EDUCATION"               -> sectorUpper.contains("EDUC") || sectorUpper.contains("FORM");
-            case "CONSTRUCTION","REAL_ESTATE"-> sectorUpper.contains("CONSTRU") || sectorUpper.contains("IMMOB") || sectorUpper.contains("BTP");
-            case "TEXTILE"                 -> sectorUpper.contains("TEXTILE") || sectorUpper.contains("HABILLEMENT");
-            case "TRADE","SERVICES"        -> sectorUpper.contains("COMMERC") || sectorUpper.contains("SERVICE") || sectorUpper.contains("TRADE");
-            default                        -> false;
+            case "TECHNOLOGY", "IT"             -> sectorUpper.contains("TECH") || sectorUpper.contains("INFORMAT") || sectorUpper.contains("DIGIT");
+            case "AGRICULTURE", "AGRI_FOOD"     -> sectorUpper.contains("AGRI") || sectorUpper.contains("AGRO") || sectorUpper.contains("ALIMENTAIRE");
+            case "TOURISM", "HOTEL"             -> sectorUpper.contains("TOUR") || sectorUpper.contains("HOTEL") || sectorUpper.contains("HOSPITAL");
+            case "INDUSTRY", "MANUFACTURING"    -> sectorUpper.contains("INDUS") || sectorUpper.contains("MANUFACTUR");
+            case "ENERGY", "RENEWABLE_ENERGY"   -> sectorUpper.contains("ENERG") || sectorUpper.contains("SOLAIRE") || sectorUpper.contains("RENOUV");
+            case "FINANCE"                      -> sectorUpper.contains("FINANC") || sectorUpper.contains("BANQUE");
+            case "HEALTH"                       -> sectorUpper.contains("SANT") || sectorUpper.contains("MEDICAL") || sectorUpper.contains("PHARMA");
+            case "EDUCATION"                    -> sectorUpper.contains("EDUC") || sectorUpper.contains("FORM");
+            case "CONSTRUCTION", "REAL_ESTATE"  -> sectorUpper.contains("CONSTRU") || sectorUpper.contains("IMMOB");
+            case "TEXTILE"                      -> sectorUpper.contains("TEXTILE") || sectorUpper.contains("HABILLEMENT");
+            case "TRADE", "SERVICES"            -> sectorUpper.contains("COMMERC") || sectorUpper.contains("SERVICE");
+            default                             -> false;
         };
     }
 
-    /**
-     * Correspondance horizon d'investissement ↔ durée de projet
-     */
     private boolean horizonMatchesDuration(String horizon, String duration) {
         if (horizon == null || duration == null) return false;
-        String h = horizon.toLowerCase();
-        String d = duration.toLowerCase();
-
-        if (h.contains("court")) {
-            return d.contains("1") || d.contains("2") || d.contains("court") || d.contains("< 2") || d.contains("an");
-        }
-        if (h.contains("moyen")) {
-            return d.contains("2") || d.contains("3") || d.contains("4") || d.contains("5") || d.contains("moyen");
-        }
-        if (h.contains("long")) {
-            return d.contains("5") || d.contains("6") || d.contains("7") || d.contains("10") || d.contains("long") || d.contains("+");
-        }
+        String h = horizon.toLowerCase(), d = duration.toLowerCase();
+        if (h.contains("court"))  return d.contains("1") || d.contains("2") || d.contains("court");
+        if (h.contains("moyen"))  return d.contains("2") || d.contains("3") || d.contains("5") || d.contains("moyen");
+        if (h.contains("long"))   return d.contains("5") || d.contains("10") || d.contains("long") || d.contains("+");
         return false;
     }
 
-    // ═════════════════════════════════════════════════════════════════
-    //  UTILITAIRES
-    // ═════════════════════════════════════════════════════════════════
     private boolean appendStr(StringBuilder sb, String key, String value, boolean first) {
         if (value == null || value.isBlank()) return first;
         if (!first) sb.append(",");
-        sb.append("\"").append(key).append("\":\"")
-                .append(value.replace("\"", "'")).append("\"");
+        sb.append("\"").append(key).append("\":\"").append(value.replace("\"", "'")).append("\"");
         return false;
     }
 
@@ -568,12 +518,8 @@ public class AIEngine {
 
     private String sanitize(String text) {
         if (text == null) return null;
-        return text
-                .replaceAll("[`\\{\\}\\[\\]]", "")
-                .replaceAll("\\\\", "")
-                .replaceAll("[\\r\\n]+", " ")
-                .replaceAll("\\s{2,}", " ")
-                .trim();
+        return text.replaceAll("[`\\{\\}\\[\\]]", "").replaceAll("\\\\", "")
+                .replaceAll("[\\r\\n]+", " ").replaceAll("\\s{2,}", " ").trim();
     }
 
     private String truncate(String text, int max) {

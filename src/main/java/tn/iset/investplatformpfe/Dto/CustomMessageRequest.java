@@ -1,12 +1,24 @@
 package tn.iset.investplatformpfe.Dto;
 
-
 // src/main/java/tn/iset/investplatformpfe/DTO/CustomMessageRequest.java
 public class CustomMessageRequest {
     private String subject;
     private String rawMessage;
     private String imageBase64;   // image encodée en base64
     private String imageName;     // nom du fichier image
+    // NOUVEAU : message final choisi par l'admin
+    // - null ou vide = l'admin n'a pas encore choisi (phase preview)
+    // - "OWN" = l'admin envoie rawMessage sans reformulation
+    // - autre valeur = la suggestion choisie
+    private String chosenMessage;
+
+    public String getChosenMessage() {
+        return chosenMessage;
+    }
+
+    public void setChosenMessage(String chosenMessage) {
+        this.chosenMessage = chosenMessage;
+    }
 
     public String getSubject() { return subject; }
     public void setSubject(String subject) { this.subject = subject; }
@@ -20,4 +32,3 @@ public class CustomMessageRequest {
     public String getImageName() { return imageName; }
     public void setImageName(String imageName) { this.imageName = imageName; }
 }
-

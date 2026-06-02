@@ -385,86 +385,75 @@ public class InternationalCompanyAuthService {
                 throw new RuntimeException("User not found in Keycloak");
             }
 
+            // ✅ UN SEUL map pour tout Keycloak
             Map<String, Object> keycloakUpdates = new HashMap<>();
             boolean emailChanged = false;
             String newEmail = null;
 
-            // GESTION DE L'EMAIL AVEC VÉRIFICATION DANS TOUTES LES TABLES
+            // GESTION EMAIL
             if (userData.containsKey("email")) {
                 newEmail = (String) userData.get("email");
-
                 if (!newEmail.equals(existing.getEmail())) {
-                    if (!isGmail(newEmail)) {
+                    if (!isGmail(newEmail))
                         throw new RuntimeException("The new email must be a valid Gmail address");
-                    }
-                    // ✅ Vérifier dans TOUTES les tables
-                    if (isEmailAlreadyUsed(newEmail) && !newEmail.equals(existing.getEmail())) {
+                    if (isEmailAlreadyUsed(newEmail))
                         throw new RuntimeException("Email already in use: " + newEmail);
-                    }
                     emailChanged = true;
+                    // ✅ Email ajouté dans le MÊME map Keycloak
+                    keycloakUpdates.put("email", newEmail);
+                    keycloakUpdates.put("username", newEmail);
+                    keycloakUpdates.put("emailVerified", true);
                 }
             }
 
-            // Mise à jour des autres champs
-            if (userData.containsKey("companyName")) {
-                existing.setCompanyName((String) userData.get("companyName"));
-            }
+            // CHAMPS KEYCLOAK + MySQL
             if (userData.containsKey("contactLastName")) {
-                String newLastName = (String) userData.get("contactLastName");
-                existing.setContactLastName(newLastName);
-                keycloakUpdates.put("lastName", newLastName);
+                String val = (String) userData.get("contactLastName");
+                existing.setContactLastName(val);
+                keycloakUpdates.put("lastName", val);
             }
             if (userData.containsKey("contactFirstName")) {
-                String newFirstName = (String) userData.get("contactFirstName");
-                existing.setContactFirstName(newFirstName);
-                keycloakUpdates.put("firstName", newFirstName);
+                String val = (String) userData.get("contactFirstName");
+                existing.setContactFirstName(val);
+                keycloakUpdates.put("firstName", val);
             }
-            if (userData.containsKey("phone")) {
+
+            // CHAMPS MySQL UNIQUEMENT
+            if (userData.containsKey("companyName"))
+                existing.setCompanyName((String) userData.get("companyName"));
+            if (userData.containsKey("phone"))
                 existing.setPhone((String) userData.get("phone"));
-            }
-            if (userData.containsKey("originCountry")) {
+            if (userData.containsKey("originCountry"))
                 existing.setOriginCountry((String) userData.get("originCountry"));
-            }
+            if (userData.containsKey("website"))
+                existing.setWebsite((String) userData.get("website"));
+            if (userData.containsKey("linkedinProfile"))
+                existing.setLinkedinProfile((String) userData.get("linkedinProfile"));
+            if (userData.containsKey("profilePicture"))
+                existing.setProfilePicture((String) userData.get("profilePicture"));
 
-
-            // Mise à jour du SIRET
-            String newSiret = null;
+            // SIRET
             if (userData.containsKey("siret")) {
-                newSiret = (String) userData.get("siret");
+                String newSiret = (String) userData.get("siret");
                 if (newSiret != null && !newSiret.trim().isEmpty()) {
                     validateSiret(newSiret);
-                    // Vérifier si le nouveau SIRET n'est pas déjà utilisé par un autre compte
-                    if (!newSiret.equals(existing.getSiret()) && companyRepository.existsBySiret(newSiret)) {
+                    if (!newSiret.equals(existing.getSiret()) && companyRepository.existsBySiret(newSiret))
                         throw new RuntimeException("This SIRET number is already in use by another company");
-                    }
                 }
+                existing.setSiret(newSiret);
             }
-// Sauvegarder le SIRET (même s'il est null ou vide)
-            existing.setSiret(newSiret);
 
-
-            // Mise à jour du secteur d'activité
+            // SECTEUR
             if (userData.containsKey("activitySector") && userData.get("activitySector") != null) {
-                String sectorStr = (String) userData.get("activitySector");
                 try {
-                    ActivityDomain domain = ActivityDomain.valueOf(sectorStr.toUpperCase());
-                    existing.setActivitySector(domain);
+                    existing.setActivitySector(ActivityDomain.valueOf(
+                            ((String) userData.get("activitySector")).toUpperCase()));
                 } catch (IllegalArgumentException e) {
-                    throw new RuntimeException("Invalid activity sector: " + sectorStr);
+                    throw new RuntimeException("Invalid activity sector: " + userData.get("activitySector"));
                 }
             }
 
-            if (userData.containsKey("website")) {
-                existing.setWebsite((String) userData.get("website"));
-            }
-            if (userData.containsKey("linkedinProfile")) {
-                existing.setLinkedinProfile((String) userData.get("linkedinProfile"));
-            }
-            if (userData.containsKey("profilePicture")) {
-                existing.setProfilePicture((String) userData.get("profilePicture"));
-            }
-
-            // Mise à jour du mot de passe si fourni
+            // PASSWORD
             if (userData.containsKey("password")) {
                 String newPassword = (String) userData.get("password");
                 if (newPassword != null && !newPassword.isEmpty() && newPassword.length() >= 6) {
@@ -473,18 +462,13 @@ public class InternationalCompanyAuthService {
                 }
             }
 
-            // 1. Mettre à jour Keycloak avec les modifications standards
+            // ✅ UN SEUL appel Keycloak (firstName + lastName + email + username ensemble)
             if (!keycloakUpdates.isEmpty()) {
                 updateUserInKeycloak(userId, keycloakUpdates, adminToken);
             }
 
-            // 2. Gérer le changement d'email dans Keycloak SI NÉCESSAIRE
-            if (emailChanged) {
-                updateEmailInKeycloak(userId, newEmail, adminToken);
-                existing.setEmail(newEmail);
-            }
-
-            // 3. Sauvegarder dans MySQL
+            // ✅ MySQL après Keycloak
+            if (emailChanged) existing.setEmail(newEmail);
             internationalcompany updated = companyRepository.save(existing);
 
             System.out.println("✅ SIRET après sauvegarde: '" + updated.getSiret() + "'");
@@ -496,7 +480,6 @@ public class InternationalCompanyAuthService {
             response.put("companyName", updated.getCompanyName());
             response.put("contactLastName", updated.getContactLastName());
             response.put("contactFirstName", updated.getContactFirstName());
-
             return response;
 
         } catch (Exception e) {
@@ -504,7 +487,6 @@ public class InternationalCompanyAuthService {
             throw new RuntimeException("Error during profile update: " + e.getMessage());
         }
     }
-
     // ========================================
     // MOT DE PASSE OUBLIÉ
     // ========================================
@@ -704,20 +686,17 @@ public class InternationalCompanyAuthService {
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.setBearerAuth(adminToken);
 
-        Map<String, Object> safeUpdates = new HashMap<>();
-        if (updates.containsKey("firstName")) {
-            safeUpdates.put("firstName", updates.get("firstName"));
-        }
-        if (updates.containsKey("lastName")) {
-            safeUpdates.put("lastName", updates.get("lastName"));
-        }
+        // ✅ Comme LocalPartner : envoie directement sans sur-filtrage
+        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(updates, headers);
 
-        if (!safeUpdates.isEmpty()) {
-            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(safeUpdates, headers);
+        try {
             restTemplate.exchange(updateUrl, HttpMethod.PUT, entity, String.class);
+            System.out.println("✅ Keycloak mis à jour pour userId: " + userId);
+        } catch (org.springframework.web.client.HttpClientErrorException e) {
+            System.err.println("❌ Keycloak error: " + e.getResponseBodyAsString());
+            throw new RuntimeException("Keycloak update error: " + e.getResponseBodyAsString());
         }
     }
-
     private void updateEmailInKeycloak(String userId, String newEmail, String adminToken) {
         String updateUrl = authServerUrl + "/admin/realms/" + realm + "/users/" + userId;
 

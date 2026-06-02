@@ -1258,46 +1258,38 @@ public class InvestmentServiceService {
             );
         }
 
-        // ✅ Minimum Amount
-        if (service.getMinimumAmount() == null) {
-            log.error("❌ Validation failed: missing minimum amount");
-            throw new RuntimeException(
-                    "⚠️ Minimum investment amount is required. Please specify the minimum amount an investor can contribute."
-            );
-        }
-        if (service.getMinimumAmount().compareTo(BigDecimal.ZERO) <= 0) {
-            log.error("❌ Validation failed: minimum amount <= 0 ({})", service.getMinimumAmount());
-            throw new RuntimeException(
-                    "⚠️ Invalid minimum amount: " + service.getMinimumAmount() + " TND. " +
-                            "The minimum investment amount must be greater than 0 TND."
-            );
-        }
+        // ✅ Minimum Amount — OPTIONNEL
+        if (service.getMinimumAmount() != null
+                && service.getMinimumAmount().compareTo(BigDecimal.ZERO) > 0) {
 
-        // ✅ Total >= Minimum
-        if (service.getTotalAmount().compareTo(service.getMinimumAmount()) < 0) {
-            log.error("❌ Validation failed: totalAmount ({}) < minimumAmount ({})",
-                    service.getTotalAmount(), service.getMinimumAmount());
-            throw new RuntimeException(
-                    "⚠️ Invalid amount configuration: Total amount (" + service.getTotalAmount() + " TND) " +
-                            "cannot be less than the minimum investment amount (" + service.getMinimumAmount() + " TND). " +
-                            "Please ensure the total amount is greater than or equal to the minimum amount."
-            );
+            // ✅ Total >= Minimum
+            if (service.getTotalAmount() != null
+                    && service.getTotalAmount().compareTo(service.getMinimumAmount()) < 0) {
+                log.error("❌ Validation failed: totalAmount ({}) < minimumAmount ({})",
+                        service.getTotalAmount(), service.getMinimumAmount());
+                throw new RuntimeException(
+                        "⚠️ Invalid amount configuration: Total amount (" +
+                                service.getTotalAmount() + " TND) " +
+                                "cannot be less than the minimum investment amount (" +
+                                service.getMinimumAmount() + " TND). " +
+                                "Please ensure the total amount is greater than or equal to the minimum amount."
+                );
+            }
         }
 
         // ✅ Deadline Date
-        if (service.getDeadlineDate() == null) {
-            log.error("❌ Validation failed: missing deadline date");
-            throw new RuntimeException(
-                    "⚠️ Deadline date is required. Please specify the closing date for this investment opportunity."
-            );
-        }
-        if (!service.getDeadlineDate().isAfter(LocalDate.now())) {
-            log.error("❌ Validation failed: deadlineDate ({}) is not in the future", service.getDeadlineDate());
-            throw new RuntimeException(
-                    "⚠️ Invalid deadline date: " + service.getDeadlineDate() + ". " +
-                            "The deadline date must be a future date (strictly after today: " + LocalDate.now() + "). " +
-                            "Please select a valid future date."
-            );
+        // ✅ Deadline Date — OPTIONNEL
+        if (service.getDeadlineDate() != null) {
+            if (!service.getDeadlineDate().isAfter(LocalDate.now())) {
+                log.error("❌ Validation failed: deadlineDate ({}) is not in the future",
+                        service.getDeadlineDate());
+                throw new RuntimeException(
+                        "⚠️ Invalid deadline date: " + service.getDeadlineDate() + ". " +
+                                "The deadline date must be a future date (strictly after today: " +
+                                LocalDate.now() + "). " +
+                                "Please select a valid future date."
+                );
+            }
         }
 
         log.debug("✅ All fields validated successfully");

@@ -1,33 +1,41 @@
 package tn.iset.investplatformpfe.Service;
 
-
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.mail.SimpleMailMessage;
+import jakarta.mail.internet.MimeMessage;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
 @Service
 public class EmailService {
 
-    @Autowired
-    private JavaMailSender mailSender;
+    private final JavaMailSender mailSender;
 
     private boolean testMode = false;
 
-    public boolean send(String to, String content) {
-        try {
+    public EmailService(JavaMailSender mailSender) {
+        this.mailSender = mailSender;
+    }
 
+
+    public boolean send(String to, String content) {
+        return sendHtml(to, "Opportunity Proposal", content);
+    }
+
+
+    public boolean sendHtml(String to, String subject, String htmlContent) {
+        try {
             if (testMode) {
                 to = "your_test_email@gmail.com";
             }
 
-            SimpleMailMessage message = new SimpleMailMessage();
-            message.setTo(to);
-            message.setSubject("Opportunity Proposal");
-            message.setText(content);
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            helper.setTo(to);
+            helper.setSubject(subject);
+            helper.setText(htmlContent, true);
 
             mailSender.send(message);
-
             return true;
 
         } catch (Exception e) {

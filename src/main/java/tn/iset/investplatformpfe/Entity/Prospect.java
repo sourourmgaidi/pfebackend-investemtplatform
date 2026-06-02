@@ -25,7 +25,15 @@ public class Prospect {
     @Column(columnDefinition = "TEXT")
     private String generatedMessage;
 
+    @Column(columnDefinition = "TEXT")
+    private String generatedSuggestions;
+
     private LocalDateTime sentAt;
+
+
+    public String getGeneratedSuggestions() { return generatedSuggestions; }
+    public void setGeneratedSuggestions(String s) { this.generatedSuggestions = s; }
+
 
     public Long getId() {
         return id;
@@ -123,5 +131,3 @@ public class Prospect {
         this.sentAt = sentAt;
     }
 }
-
-

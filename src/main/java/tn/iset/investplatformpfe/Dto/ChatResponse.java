@@ -1,5 +1,6 @@
 package tn.iset.investplatformpfe.Dto;
 
+// src/main/java/tn/iset/investplatformpfe/DTO/ChatResponse.java
 
 public class ChatResponse {
     private String reply;

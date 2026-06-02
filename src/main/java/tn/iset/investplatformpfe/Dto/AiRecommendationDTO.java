@@ -1,6 +1,5 @@
 package tn.iset.investplatformpfe.Dto;
 
-
 import java.math.BigDecimal;
 import java.util.List;
 
@@ -97,4 +96,3 @@ public class AiRecommendationDTO {
         public void setReason(String reason) { this.reason = reason; }
     }
 }
-

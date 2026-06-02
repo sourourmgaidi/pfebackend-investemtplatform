@@ -1,5 +1,6 @@
 package tn.iset.investplatformpfe.Service;
 
+// src/main/java/tn/iset/investplatformpfe/Service/RichEmailService.java
 
 import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeMessage;
@@ -27,40 +28,92 @@ public class RichEmailService {
             helper.setSubject(subject);
 
             if (imageBase64 != null && !imageBase64.isBlank()) {
-                // Construire un email HTML avec l'image intégrée
-                String htmlContent = "<div style='font-family:Arial,sans-serif;max-width:600px;margin:auto;'>" +
-                        "<div style='background:#0f172a;padding:20px;border-radius:12px 12px 0 0;'>" +
-                        "<h2 style='color:#38bdf8;margin:0;'>InvestPlatform</h2>" +
-                        "</div>" +
-                        "<div style='padding:24px;background:#fff;border:1px solid #e2e8f0;'>" +
-                        "<p style='white-space:pre-line;color:#1e293b;line-height:1.7;'>" + content + "</p>" +
-                        "<br/><img src='cid:attachedImage' style='max-width:100%;border-radius:8px;'/>" +
-                        "</div>" +
-                        "<div style='background:#f8fafc;padding:12px 24px;border-radius:0 0 12px 12px;border:1px solid #e2e8f0;border-top:none;'>" +
-                        "<p style='color:#94a3b8;font-size:12px;margin:0;'>© 2025 InvestPlatform — Ne pas répondre à cet email</p>" +
-                        "</div></div>";
+                String htmlContent = "<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'>" +
+                        "<meta name='viewport' content='width=device-width,initial-scale=1'></head>" +
+                        "<body style='margin:0;padding:0;background-color:#f4f6f9;font-family:Arial,sans-serif;'>" +
+                        "<table width='100%' cellpadding='0' cellspacing='0' style='background:#f4f6f9;padding:40px 0;'>" +
+                        "<tr><td align='center'>" +
+                        "<table width='600' cellpadding='0' cellspacing='0' style='background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);'>" +
+
+                        // Header
+                        "<tr><td style='background:#0d1b2a;padding:32px 40px;text-align:center;'>" +
+                        "<span style='font-size:26px;font-weight:800;color:#4da6ff;letter-spacing:1px;'>InvestPlatform</span>" +
+                        "<p style='margin:6px 0 0;color:#8ab4d4;font-size:13px;letter-spacing:2px;text-transform:uppercase;'>Smart Investment Management</p>" +
+                        "</td></tr>" +
+
+                        // Accent bar
+                        "<tr><td style='height:4px;background:linear-gradient(to right,#4da6ff,#0057b8);'></td></tr>" +
+
+                        // Body text
+                        "<tr><td style='padding:40px 40px 24px;color:#2d3748;font-size:15px;line-height:1.7;'>" +
+                        "<p style='margin:0;white-space:pre-line;'>" + content + "</p>" +
+                        "</td></tr>" +
+
+                        // Image
+                        "<tr><td style='padding:0 40px 32px;'>" +
+                        "<img src='cid:attachedImage' style='width:100%;max-width:520px;border-radius:10px;display:block;'/>" +
+                        "</td></tr>" +
+
+                        // CTA Button
+                        "<tr><td style='padding:0 40px 40px;text-align:center;'>" +
+                        "<a href='https://investplatform.com' style='display:inline-block;background:#0057b8;color:#ffffff;text-decoration:none;padding:14px 36px;border-radius:8px;font-size:15px;font-weight:700;'>Discover InvestPlatform →</a>" +
+                        "</td></tr>" +
+
+                        // Divider
+                        "<tr><td style='padding:0 40px;'><hr style='border:none;border-top:1px solid #e2e8f0;'></td></tr>" +
+
+                        // Footer
+                        "<tr><td style='padding:24px 40px;text-align:center;'>" +
+                        "<p style='margin:0;font-size:12px;color:#a0aec0;'>© 2025 InvestPlatform — <a href='mailto:contact@investplatform.com' style='color:#4da6ff;text-decoration:none;'>contact@investplatform.com</a></p>" +
+                        "<p style='margin:6px 0 0;font-size:11px;color:#cbd5e0;'>You are receiving this email because you are a registered prospect. <a href='#' style='color:#a0aec0;'>Unsubscribe</a></p>" +
+                        "</td></tr>" +
+
+                        "</table></td></tr></table></body></html>";
 
                 helper.setText(htmlContent, true);
-
-                // Attacher l'image inline
                 byte[] imageBytes = Base64.getDecoder().decode(imageBase64);
                 String mimeType = detectMimeType(imageName);
-                ByteArrayResource resource = new ByteArrayResource(imageBytes);
-                helper.addInline("attachedImage", resource, mimeType);
-
+                helper.addInline("attachedImage", new ByteArrayResource(imageBytes), mimeType);
             } else {
-                // Email HTML sans image
-                String htmlContent = "<div style='font-family:Arial,sans-serif;max-width:600px;margin:auto;'>" +
-                        "<div style='background:#0f172a;padding:20px;border-radius:12px 12px 0 0;'>" +
-                        "<h2 style='color:#38bdf8;margin:0;'>InvestPlatform</h2>" +
-                        "</div>" +
-                        "<div style='padding:24px;background:#fff;border:1px solid #e2e8f0;'>" +
-                        "<p style='white-space:pre-line;color:#1e293b;line-height:1.7;'>" + content + "</p>" +
-                        "</div>" +
-                        "<div style='background:#f8fafc;padding:12px 24px;border-radius:0 0 12px 12px;border:1px solid #e2e8f0;border-top:none;'>" +
-                        "<p style='color:#94a3b8;font-size:12px;margin:0;'>© 2025 InvestPlatform — Ne pas répondre à cet email</p>" +
-                        "</div></div>";
+                // Email HTML sans image — NOUVEAU DESIGN
+                String htmlContent = "<!DOCTYPE html><html lang='en'><head><meta charset='UTF-8'>" +
+                        "<meta name='viewport' content='width=device-width,initial-scale=1'></head>" +
+                        "<body style='margin:0;padding:0;background-color:#f4f6f9;font-family:Arial,sans-serif;'>" +
+                        "<table width='100%' cellpadding='0' cellspacing='0' style='background:#f4f6f9;padding:40px 0;'>" +
+                        "<tr><td align='center'>" +
+                        "<table width='600' cellpadding='0' cellspacing='0' style='background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08);'>" +
+
+                        // Header
+                        "<tr><td style='background:#0d1b2a;padding:32px 40px;text-align:center;'>" +
+                        "<span style='font-size:26px;font-weight:800;color:#4da6ff;letter-spacing:1px;'>InvestPlatform</span>" +
+                        "<p style='margin:6px 0 0;color:#8ab4d4;font-size:13px;letter-spacing:2px;text-transform:uppercase;'>Smart Investment Management</p>" +
+                        "</td></tr>" +
+
+                        // Accent bar
+                        "<tr><td style='height:4px;background:linear-gradient(to right,#4da6ff,#0057b8);'></td></tr>" +
+
+                        // Body
+                        "<tr><td style='padding:40px 40px 32px;color:#2d3748;font-size:15px;line-height:1.7;'>" +
+                        "<p style='margin:0;white-space:pre-line;'>" + content + "</p>" +
+                        "</td></tr>" +
+
+                        // CTA Button
+                        "<tr><td style='padding:0 40px 40px;text-align:center;'>" +
+                        "<a href='https://investplatform.com' style='display:inline-block;background:#0057b8;color:#ffffff;text-decoration:none;padding:14px 36px;border-radius:8px;font-size:15px;font-weight:700;'>Discover InvestPlatform →</a>" +
+                        "</td></tr>" +
+
+                        // Divider
+                        "<tr><td style='padding:0 40px;'><hr style='border:none;border-top:1px solid #e2e8f0;'></td></tr>" +
+
+                        // Footer
+                        "<tr><td style='padding:24px 40px;text-align:center;'>" +
+                        "<p style='margin:0;font-size:12px;color:#a0aec0;'>© 2025 InvestPlatform — <a href='mailto:contact@investplatform.com' style='color:#4da6ff;text-decoration:none;'>contact@investplatform.com</a></p>" +
+                        "<p style='margin:6px 0 0;font-size:11px;color:#cbd5e0;'>You are receiving this email because you are a registered prospect. <a href='#' style='color:#a0aec0;'>Unsubscribe</a></p>" +
+                        "</td></tr>" +
+
+                        "</table></td></tr></table></body></html>";
                 helper.setText(htmlContent, true);
+
             }
 
             mailSender.send(message);
@@ -81,4 +134,3 @@ public class RichEmailService {
         return "image/jpeg";
     }
 }
-

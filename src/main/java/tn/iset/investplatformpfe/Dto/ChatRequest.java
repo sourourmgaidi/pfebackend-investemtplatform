@@ -1,5 +1,7 @@
 package tn.iset.investplatformpfe.Dto;
 
+// src/main/java/tn/iset/investplatformpfe/DTO/ChatRequest.java
+
 import java.util.List;
 
 public class ChatRequest {

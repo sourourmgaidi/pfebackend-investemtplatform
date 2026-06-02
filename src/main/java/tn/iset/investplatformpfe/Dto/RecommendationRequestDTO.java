@@ -1,6 +1,5 @@
 package tn.iset.investplatformpfe.Dto;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonSetter;
 import tn.iset.investplatformpfe.Entity.ActivityDomain;
 import tn.iset.investplatformpfe.Entity.Role;
@@ -10,44 +9,48 @@ import java.util.List;
 
 public class RecommendationRequestDTO {
 
-    // ── userType reçu comme String depuis Angular → converti en Role ────────
-    private Role         userType;
-    private Long         regionId;
+    // ── Général ──────────────────────────────────────────────────────────
+    private Role           userType;
+    private Long           regionId;
     private ActivityDomain activityDomain;
-    private BigDecimal   budget;
-    private String       availability;
+    private BigDecimal     budget;
+    private String         availability;
 
-    // Touriste
-    private Integer      groupSize;
-    private List<String> preferredLanguages;
-    private String  targetAudienceRaw;
+    // ── Touriste ─────────────────────────────────────────────────────────
+    private String         targetAudienceRaw;
+    private Integer        groupSize;
+    private Integer        preferredDurationHours;
+    private List<String>   preferredLanguages;
+    private List<String>   preferredIncludedServices;
 
-    // Investisseur
-    private String       investmentHorizon;
-    private String       preferredSector;
-    private BigDecimal   minimumReturn;
-    private String       riskLevel;
-    private String       projectDescription;
-    private String       specificRequirements;
+    // ── Investisseur ──────────────────────────────────────────────────────
+    private String         investmentHorizon;
+    private String         preferredSector;
+    private BigDecimal     minimumReturn;
+    private String         riskLevel;
+    private String         projectDescription;
+    private String         specificRequirements;
+    private String         zone;
 
-    // Partenaire / Collaboration
-    private String       collaborationGoal;
-    private List<String> offeredSkills;
-    private String       collaborationType;
-    private String       partnershipDuration;
-    private String       partnerCriteria;
+    // ── Partenaire / Collaboration ────────────────────────────────────────
+    private String         collaborationGoal;
+    private List<String>   offeredSkills;
+    private List<String>   requiredSkillsNeeded;
+    private String         collaborationType;
+    private String         partnershipDuration;
+    private String         partnerCriteria;
 
-    // Société Internationale
-    private String       serviceTypeFilter;
-    private String       companyPresentation;
-    private String       originCountry;
-    private String       companySize;
-    private String       strategicGoal;
-    private String       legalConstraints;
+    // ── Société Internationale ────────────────────────────────────────────
+    private String         serviceTypeFilter;
+    private String         companyPresentation;
+    private String         originCountry;
+    private String         companySize;
+    private String         strategicGoal;
+    private String         legalConstraints;
 
-    // ════════════════════════════════════════════════════════════════════════
-    //  DÉSÉRIALISATION ROBUSTE — String → Enum (vient du front Angular)
-    // ════════════════════════════════════════════════════════════════════════
+    // ════════════════════════════════════════════════════════════════════
+    //  DÉSÉRIALISATION ROBUSTE — String → Enum
+    // ════════════════════════════════════════════════════════════════════
 
     @JsonSetter("userType")
     public void setUserTypeFromString(String value) {
@@ -69,16 +72,15 @@ public class RecommendationRequestDTO {
         }
     }
 
-
     @JsonSetter("targetAudience")
     public void setTargetAudienceFromString(String value) {
         if (value == null || value.isBlank()) { this.targetAudienceRaw = null; return; }
         this.targetAudienceRaw = value.trim().toUpperCase();
     }
 
-    // ════════════════════════════════════════════════════════════════════════
+    // ════════════════════════════════════════════════════════════════════
     //  GETTERS & SETTERS
-    // ════════════════════════════════════════════════════════════════════════
+    // ════════════════════════════════════════════════════════════════════
 
     public Role getUserType() { return userType; }
     public void setUserType(Role userType) { this.userType = userType; }
@@ -95,26 +97,29 @@ public class RecommendationRequestDTO {
     public String getAvailability() { return availability; }
     public void setAvailability(String availability) { this.availability = availability; }
 
-    public Integer getGroupSize() { return groupSize; }
-    public void setGroupSize(Integer groupSize) { this.groupSize = groupSize; }
-
-    public List<String> getPreferredLanguages() { return preferredLanguages; }
-    public void setPreferredLanguages(List<String> l) { this.preferredLanguages = l; }
-
+    // ── Touriste ──────────────────────────────────────────────────────────
     public TargetAudience getTargetAudience() {
         if (targetAudienceRaw == null) return null;
-        try {
-            return TargetAudience.valueOf(targetAudienceRaw);
-        } catch (IllegalArgumentException e) {
-            return null;
-        }
+        try { return TargetAudience.valueOf(targetAudienceRaw); }
+        catch (IllegalArgumentException e) { return null; }
     }
-
-    // Garder ce setter pour compatibilité si besoin ailleurs
     public void setTargetAudience(TargetAudience t) {
         this.targetAudienceRaw = t != null ? t.name() : null;
     }
 
+    public Integer getGroupSize() { return groupSize; }
+    public void setGroupSize(Integer g) { this.groupSize = g; }
+
+    public Integer getPreferredDurationHours() { return preferredDurationHours; }
+    public void setPreferredDurationHours(Integer h) { this.preferredDurationHours = h; }
+
+    public List<String> getPreferredLanguages() { return preferredLanguages; }
+    public void setPreferredLanguages(List<String> l) { this.preferredLanguages = l; }
+
+    public List<String> getPreferredIncludedServices() { return preferredIncludedServices; }
+    public void setPreferredIncludedServices(List<String> l) { this.preferredIncludedServices = l; }
+
+    // ── Investisseur ───────────────────────────────────────────────────────
     public String getInvestmentHorizon() { return investmentHorizon; }
     public void setInvestmentHorizon(String s) { this.investmentHorizon = s; }
 
@@ -133,11 +138,18 @@ public class RecommendationRequestDTO {
     public String getSpecificRequirements() { return specificRequirements; }
     public void setSpecificRequirements(String s) { this.specificRequirements = s; }
 
+    public String getZone() { return zone; }
+    public void setZone(String s) { this.zone = s; }
+
+    // ── Partenaire / Collaboration ─────────────────────────────────────────
     public String getCollaborationGoal() { return collaborationGoal; }
     public void setCollaborationGoal(String s) { this.collaborationGoal = s; }
 
     public List<String> getOfferedSkills() { return offeredSkills; }
     public void setOfferedSkills(List<String> l) { this.offeredSkills = l; }
+
+    public List<String> getRequiredSkillsNeeded() { return requiredSkillsNeeded; }
+    public void setRequiredSkillsNeeded(List<String> l) { this.requiredSkillsNeeded = l; }
 
     public String getCollaborationType() { return collaborationType; }
     public void setCollaborationType(String s) { this.collaborationType = s; }
@@ -148,6 +160,7 @@ public class RecommendationRequestDTO {
     public String getPartnerCriteria() { return partnerCriteria; }
     public void setPartnerCriteria(String s) { this.partnerCriteria = s; }
 
+    // ── Société Internationale ─────────────────────────────────────────────
     public String getServiceTypeFilter() { return serviceTypeFilter; }
     public void setServiceTypeFilter(String s) { this.serviceTypeFilter = s; }
 

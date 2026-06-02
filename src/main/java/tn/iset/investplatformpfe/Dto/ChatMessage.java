@@ -1,5 +1,6 @@
 package tn.iset.investplatformpfe.Dto;
 
+// src/main/java/tn/iset/investplatformpfe/DTO/ChatMessage.java
 
 public class ChatMessage {
     private String role;    // "user" ou "assistant"
@@ -17,4 +18,3 @@ public class ChatMessage {
     public String getContent() { return content; }
     public void setContent(String content) { this.content = content; }
 }
-

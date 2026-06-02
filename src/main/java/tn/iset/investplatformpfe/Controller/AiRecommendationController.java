@@ -1,6 +1,5 @@
 package tn.iset.investplatformpfe.Controller;
 
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -10,7 +9,12 @@ import org.springframework.web.bind.annotation.*;
 import tn.iset.investplatformpfe.Dto.AiRecommendationDTO.AiRecommendationResponse;
 import tn.iset.investplatformpfe.Service.AiRecommendationService;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 @RestController
 @RequestMapping("/api/ai")
@@ -51,15 +55,30 @@ public class AiRecommendationController {
         log.info("🤖 Recommandation IA demandée par {} (rôle: {})", email, userRole);
 
         try {
-            AiRecommendationResponse response =
-                    aiRecommendationService.recommendForUser(email, userRole);
+            // ✅ Timeout global 100s — évite le blocage infini
+            AiRecommendationResponse response = CompletableFuture
+                    .supplyAsync(() -> aiRecommendationService.recommendForUser(email, userRole))
+                    .get(100, TimeUnit.SECONDS);
+
             log.info("✅ {} services scorés pour {}", response.getRankedServices().size(), email);
             return ResponseEntity.ok(response);
 
+        } catch (TimeoutException e) {
+            // ✅ Timeout dépassé → retourner liste vide (pas 500 !)
+            log.warn("⏱️ Timeout global atteint pour {} — retour liste vide", email);
+            AiRecommendationResponse fallback = new AiRecommendationResponse();
+            fallback.setRankedServices(Collections.emptyList());
+            fallback.setGlobalExplanation(
+                    "AI scoring timed out — services are shown in default order.");
+            return ResponseEntity.ok(fallback); // ✅ 200, jamais 500
+
         } catch (Exception e) {
+            // ✅ Toute autre erreur → aussi 200 avec liste vide
             log.error("❌ Erreur recommandation IA pour {}: {}", email, e.getMessage(), e);
-            return ResponseEntity.internalServerError()
-                    .body(Map.of("error", "Erreur lors de la génération des recommandations."));
+            AiRecommendationResponse fallback = new AiRecommendationResponse();
+            fallback.setRankedServices(Collections.emptyList());
+            fallback.setGlobalExplanation("");
+            return ResponseEntity.ok(fallback); // ✅ jamais 500
         }
     }
 
@@ -99,7 +118,7 @@ public class AiRecommendationController {
                  "ECONOMICPARTNER", "ECONOMIC"                   -> "ECONOMIC_PARTNER";
             case "INTERNATIONAL_COMPANY", "COMPANY",
                  "INTERNATIONAL", "INTERNATIONALCOMPANY"         -> "INTERNATIONAL_COMPANY";
-            case "TOURIST"                                        -> "TOURIST"; // ← AJOUT
+            case "TOURIST"                                        -> "TOURIST";
             default -> "UNKNOWN";
         };
     }

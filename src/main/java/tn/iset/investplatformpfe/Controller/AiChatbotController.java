@@ -51,10 +51,10 @@ public class AiChatbotController {
         }
 
         try {
-            // 🔥 Récupérer user ID depuis token
+            //  Récupérer user ID depuis token
             String userId = jwt.getSubject();
 
-            // 🔥 1. Sauvegarder message USER
+            //  1. Sauvegarder message USER
             ChatMessageJur userMsg = new ChatMessageJur();
             userMsg.setSender("USER");
             userMsg.setMessage(question);
@@ -63,7 +63,7 @@ public class AiChatbotController {
 
             chatMessageJurRepository.save(userMsg);
 
-            // 🔥 Appel Flask
+            //  Appel Flask
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
 
@@ -73,10 +73,10 @@ public class AiChatbotController {
             ResponseEntity<Map> response =
                     restTemplate.postForEntity(FLASK_URL, request, Map.class);
 
-            // 🔥 2. Récupérer réponse BOT
+            //  2. Récupérer réponse BOT
             String answer = (String) response.getBody().get("answer");
 
-            // 🔥 3. Sauvegarder message BOT
+            //  3. Sauvegarder message BOT
             ChatMessageJur botMsg = new ChatMessageJur();
             botMsg.setSender("BOT");
             botMsg.setMessage(answer);
@@ -88,7 +88,7 @@ public class AiChatbotController {
             return ResponseEntity.ok(response.getBody());
 
         } catch (Exception e) {
-            e.printStackTrace(); // 🔥 affiche l'erreur dans la console Spring
+            e.printStackTrace(); //  affiche l'erreur dans la console Spring
 
             return ResponseEntity.status(503)
                     .body(Map.of(

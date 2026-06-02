@@ -1,6 +1,5 @@
 package tn.iset.investplatformpfe.Service;
 
-
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
@@ -35,4 +34,3 @@ public class OllamaService {
         return (String) response.getBody().get("response");
     }
 }
-

@@ -1,5 +1,7 @@
 package tn.iset.investplatformpfe.Controller;
 
+// src/main/java/tn/iset/investplatformpfe/Controller/ChatbotController.java
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import tn.iset.investplatformpfe.Dto.ChatRequest;
@@ -23,4 +25,3 @@ public class ChatbotController {
         return ResponseEntity.ok(new ChatResponse(reply));
     }
 }
-
