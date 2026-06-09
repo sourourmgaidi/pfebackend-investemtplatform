@@ -23,7 +23,7 @@ import java.util.Map;
 @Service
 public class TouristAuthService {
 
-    // ✅ AJOUT: Logger pour remplacer les System.out.println
+    //  AJOUT: Logger pour remplacer les System.out.println
     private static final Logger log = LoggerFactory.getLogger(TouristAuthService.class);
 
     @Value("${keycloak.auth-server-url}")

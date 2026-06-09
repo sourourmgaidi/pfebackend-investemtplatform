@@ -109,7 +109,7 @@ public class AuthController {
         try {
             Map<String, Object> response = authService.login(email, password);
 
-            // ✅ RÉCUPÉRER LE JWT ET EXTRAIRE LE RÔLE
+            //  RÉCUPÉRER LE JWT ET EXTRAIRE LE RÔLE
             String accessToken = (String) response.get("access_token");
             if (accessToken != null) {
                 String role = extractRoleFromJwt(accessToken);
@@ -122,7 +122,7 @@ public class AuthController {
         }
     }
 
-    // ✅ MÉTHODE CORRIGÉE SANS JACKSON
+    //  MÉTHODE CORRIGÉE SANS JACKSON
     private String extractRoleFromJwt(String token) {
         try {
             // Séparer les parties du JWT
@@ -186,7 +186,7 @@ public class AuthController {
         String email = jwt.getClaimAsString("email");
 
         try {
-            // ✅ Utiliser la nouvelle méthode getProfile du service
+            //  Utiliser la nouvelle méthode getProfile du service
             Map<String, Object> profile = authService.getProfile(email);
 
             // Ajouter les rôles du token JWT
@@ -256,22 +256,22 @@ public class AuthController {
         String email = null;
         if (jwt != null) {
             email = jwt.getClaimAsString("email");
-            System.out.println("📧 Email depuis JWT: " + email);
+            System.out.println(" Email depuis JWT: " + email);
         }
 
         // 2. Fallback : email depuis le body
         if (email == null) {
             email = request.get("email");
-            if (email != null) System.out.println("📧 Email depuis body: " + email);
+            if (email != null) System.out.println(" Email depuis body: " + email);
         }
 
-        // 3. ✅ NOUVEAU : extraire le sub du refreshToken → appel Keycloak → email
+        // 3.  NOUVEAU : extraire le sub du refreshToken → appel Keycloak → email
         if (email == null) {
             String sub = extractSubFromToken(refreshToken);
-            System.out.println("🔑 sub extrait du refreshToken: " + sub);
+            System.out.println(" sub extrait du refreshToken: " + sub);
             if (sub != null) {
                 email = authService.findEmailByKeycloakSub(sub);
-                System.out.println("📧 Email trouvé via Keycloak: " + email);
+                System.out.println(" Email trouvé via Keycloak: " + email);
             }
         }
 
@@ -282,9 +282,9 @@ public class AuthController {
             // Terminer la session locale
             if (email != null) {
                 authService.endSession(email);
-                System.out.println("✅ Session terminée pour " + email);
+                System.out.println(" Session terminée pour " + email);
             } else {
-                System.out.println("⚠️ Email introuvable, session non terminée");
+                System.out.println(" Email introuvable, session non terminée");
             }
 
             return ResponseEntity.ok(Map.of("message", "Déconnexion réussie"));
@@ -306,7 +306,7 @@ public class AuthController {
                     Base64.getUrlDecoder().decode(payload),
                     StandardCharsets.UTF_8
             );
-            System.out.println("🔍 Payload refreshToken décodé: " + decoded);
+            System.out.println(" Payload refreshToken décodé: " + decoded);
 
             // Extraire "sub"
             if (decoded.contains("\"sub\"")) {

@@ -365,12 +365,12 @@ public class MessagerieController {
             return ResponseEntity.badRequest().body(Map.of("error", "Action non autorisée"));
 
         try {
-            // ✅ Une seule méthode fait tout : crée l'abonnement + appelle Konnect
+            //  Une seule méthode fait tout : crée l'abonnement + appelle Konnect
             Map<String, Object> response = messagerieService.initiateSubscriptionPayment(userEmail);
 
             return ResponseEntity.ok(Map.of(
                     "paymentId",  response.get("paymentId"),   // notre ID interne
-                    "payUrl",     response.get("payUrl"),       // ✅ URL Konnect → Angular redirige ici
+                    "payUrl",     response.get("payUrl"),       //  URL Konnect → Angular redirige ici
                     "paymentRef", response.getOrDefault("paymentRef", ""),
                     "amount",     40,
                     "description","Abonnement mensuel — accès illimité aux Local Partners"

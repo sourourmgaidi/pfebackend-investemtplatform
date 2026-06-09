@@ -395,7 +395,7 @@ public class MessagerieService {
                 .build();
         subscriptionRepository.save(sub);
 
-        // ✅ 2. Appeler Konnect pour obtenir le lien de paiement
+        // 2. Appeler Konnect pour obtenir le lien de paiement
         Map<String, Object> konnectResponse = konnectSubscriptionService
                 .initiateSubscriptionPayment(40.0, paymentId);
 

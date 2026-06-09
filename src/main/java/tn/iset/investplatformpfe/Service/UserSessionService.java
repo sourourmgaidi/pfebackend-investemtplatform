@@ -56,14 +56,14 @@ public class UserSessionService {
 
             if (existing.getLoginTime() != null &&
                     existing.getLoginTime().isBefore(LocalDateTime.now().minusHours(12))) {
-                log.warn("⚠️ Session orpheline détectée pour {}, fermeture forcée", email);
+                log.warn(" Session orpheline détectée pour {}, fermeture forcée", email);
                 existing.setLogoutTime(LocalDateTime.now());
                 existing.setDurationSeconds(
                         Duration.between(existing.getLoginTime(), LocalDateTime.now()).getSeconds()
                 );
                 sessionRepository.save(existing);
             } else {
-                log.info("⚠️ Session déjà active pour {}", email);
+                log.info(" Session déjà active pour {}", email);
                 return existing;
             }
         }
@@ -74,7 +74,7 @@ public class UserSessionService {
         session.setLoginTime(LocalDateTime.now());
 
         UserSession saved = sessionRepository.save(session);
-        log.info("✅ Session démarrée pour {} à {}", email, saved.getLoginTime());
+        log.info(" Session démarrée pour {} à {}", email, saved.getLoginTime());
         return saved;
     }
 
@@ -86,7 +86,7 @@ public class UserSessionService {
         Optional<UserSession> activeSession = sessionRepository.findByUserEmailAndLogoutTimeIsNull(email);
 
         if (activeSession.isEmpty()) {
-            log.warn("⚠️ Aucune session active trouvée pour {}", email);
+            log.warn(" Aucune session active trouvée pour {}", email);
             return null;
         }
 
@@ -96,12 +96,12 @@ public class UserSessionService {
 
         LocalDateTime login = session.getLoginTime();
         if (login == null) {
-            log.warn("⚠️ loginTime null pour {}, durée mise à 0", email);
+            log.warn(" loginTime null pour {}, durée mise à 0", email);
             session.setDurationSeconds(0L);
         } else {
             long durationSeconds = Duration.between(login, logout).getSeconds();
             session.setDurationSeconds(durationSeconds);
-            log.info("✅ Session terminée pour {} - Durée: {} min", email, durationSeconds / 60);
+            log.info(" Session terminée pour {} - Durée: {} min", email, durationSeconds / 60);
         }
 
         return sessionRepository.save(session);
@@ -111,7 +111,7 @@ public class UserSessionService {
     // OBTENIR LES STATISTIQUES D'UN UTILISATEUR
     // ========================================
     public UserTimeStatsDTO getUserStats(String email) {
-        log.info("📊 Calcul des statistiques pour: {}", email);
+        log.info(" Calcul des statistiques pour: {}", email);
 
         UserTimeStatsDTO stats = new UserTimeStatsDTO();
         stats.setUserEmail(email);
@@ -147,7 +147,7 @@ public class UserSessionService {
         stats.setFormattedDifference(formatSeconds(Math.abs(difference)));
         stats.setNotificationMessage(generateNotificationMessage(stats));
 
-        // ✅ FIX PRINCIPAL : passer thisWeekStart et today (pas thisWeekEnd)
+        //  FIX PRINCIPAL : passer thisWeekStart et today (pas thisWeekEnd)
         // pour que getDailyStatsForPeriod génère Lun → aujourd'hui
         stats.setDailySeconds(getDailyStatsForPeriod(email, thisWeekStart, thisWeekEnd));
         stats.setWeeklyStats(getWeeklyStatsForPeriod(email, sixWeeksAgo, thisWeekEnd));
@@ -246,7 +246,7 @@ public class UserSessionService {
     }
 
     // ========================================
-    // ✅ FIX PRINCIPAL : getDailyStatsForPeriod
+    // FIX PRINCIPAL : getDailyStatsForPeriod
     // Génère TOUS les jours Lun → Dim (ou aujourd'hui)
     // avec 0 par défaut, puis écrase avec les vraies valeurs
     // ========================================
@@ -255,7 +255,7 @@ public class UserSessionService {
 
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("EEE dd/MM", Locale.FRENCH);
 
-        // ✅ ÉTAPE 1 : Pré-remplir tous les jours Lun → Dim avec 0
+        //  ÉTAPE 1 : Pré-remplir tous les jours Lun → Dim avec 0
         LocalDate current = start.toLocalDate();
         LocalDate today = LocalDate.now();
         // On génère jusqu'à la fin de la semaine (Dim) mais pas au-delà d'aujourd'hui
@@ -269,7 +269,7 @@ public class UserSessionService {
             current = current.plusDays(1);
         }
 
-        // ✅ ÉTAPE 2 : Écraser avec les vraies valeurs depuis la DB
+        // ÉTAPE 2 : Écraser avec les vraies valeurs depuis la DB
         List<Object[]> results = sessionRepository.getDailyStats(email, start, end);
 
         for (Object[] result : results) {

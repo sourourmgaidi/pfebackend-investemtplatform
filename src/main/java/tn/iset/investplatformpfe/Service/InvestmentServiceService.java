@@ -1051,10 +1051,11 @@ public class InvestmentServiceService {
         request.setAdmin(admin);
 
         // ✅ 5. SAUVEGARDER la demande avec la raison (pour historique)
-        serviceRequestRepository.save(request);
+
 
         // ✅ 6. NOTIFICATION au partenaire avec la raison
         notificationService.notifyPartnerRequestRejected(request);
+        serviceRequestRepository.delete(request);
 
         log.info("✅ Demande ID: {} rejetée avec raison: {}", requestId, rejectionReason);
         log.info("✅ Partenaire {} notifié avec la raison", request.getPartner().getEmail());

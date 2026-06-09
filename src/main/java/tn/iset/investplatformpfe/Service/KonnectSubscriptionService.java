@@ -31,7 +31,7 @@ public class KonnectSubscriptionService {
     @Value("${konnect.webhook.url:http://localhost:8080/api/konnect/webhook}")
     private String webhookUrl;
 
-    // ✅ MODE TEST — mettre false en production
+    //  MODE TEST — mettre false en production
     @Value("${app.payment.test-mode:true}")
     private boolean testMode;
 
@@ -43,11 +43,11 @@ public class KonnectSubscriptionService {
     // INITIER UN PAIEMENT
     // =========================================================
     public Map<String, Object> initiateSubscriptionPayment(double amountTND, String orderId) {
-        log.info("💳 Initiation paiement ABONNEMENT Konnect - Montant: {} TND, OrderId: {}", amountTND, orderId);
+        log.info(" Initiation paiement ABONNEMENT Konnect - Montant: {} TND, OrderId: {}", amountTND, orderId);
 
-        // ✅ MODE TEST → simulation directe sans appel Konnect
+        //  MODE TEST → simulation directe sans appel Konnect
         if (testMode) {
-            log.warn("🧪 MODE TEST ACTIVÉ → paiement simulé pour orderId: {}", orderId);
+            log.warn(" MODE TEST ACTIVÉ → paiement simulé pour orderId: {}", orderId);
             return simulatedKonnectResponse(orderId);
         }
 
@@ -75,7 +75,7 @@ public class KonnectSubscriptionService {
 
         try {
             ResponseEntity<Map> response = restTemplate.postForEntity(url, request, Map.class);
-            log.info("✅ Konnect réponse abonnement: {}", response.getBody());
+            log.info("Konnect réponse abonnement: {}", response.getBody());
             return response.getBody();
         } catch (Exception e) {
             log.error("❌ Erreur Konnect abonnement: {}", e.getMessage());

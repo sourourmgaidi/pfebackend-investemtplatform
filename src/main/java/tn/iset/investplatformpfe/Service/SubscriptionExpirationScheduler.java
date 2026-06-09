@@ -17,7 +17,7 @@ public class SubscriptionExpirationScheduler {
         this.messagerieService = messagerieService;
     }
 
-    // ✅ CORRIGÉ : tourne chaque jour à 09h00 (pas chaque minute)
+    //  CORRIGÉ : tourne chaque jour à 09h00 (pas chaque minute)
     @Scheduled(cron = "0 0 9 * * *")
     public void checkExpiringSubscriptions() {
         log.info("🕘 [SCHEDULER] Checking subscriptions expiring in 2 days...");

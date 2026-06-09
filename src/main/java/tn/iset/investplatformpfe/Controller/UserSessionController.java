@@ -18,7 +18,7 @@ import java.util.Map;
 @CrossOrigin(origins = "*")
 public class UserSessionController {
 
-    // ✅ AJOUT: Logger pour remplacer les System.out.println
+    //  AJOUT: Logger pour remplacer les System.out.println
     private static final Logger log = LoggerFactory.getLogger(UserSessionController.class);
 
     private final UserSessionService sessionService;
@@ -38,7 +38,7 @@ public class UserSessionController {
 
         String email = jwt.getClaimAsString("email");
 
-        // ✅ CORRIGÉ: Le rôle dans le JWT Keycloak est dans "realm_access.roles"
+        //  CORRIGÉ: Le rôle dans le JWT Keycloak est dans "realm_access.roles"
         // et non dans un claim "role" direct — on récupère le rôle depuis la session
         // ou on passe une valeur par défaut si absent
         String role = jwt.getClaimAsString("role");
@@ -64,7 +64,7 @@ public class UserSessionController {
 
         try {
             sessionService.startSession(email, role);
-            log.info("✅ Session démarrée pour {}", email);
+            log.info(" Session démarrée pour {}", email);
             return ResponseEntity.ok(Map.of("success", true, "message", "Session démarrée"));
         } catch (Exception e) {
             log.error("Erreur démarrage session pour {}: {}", email, e.getMessage());
@@ -84,10 +84,10 @@ public class UserSessionController {
 
         String email = jwt.getClaimAsString("email");
 
-        // ✅ CORRIGÉ: Résultat ignoré silencieusement avant — maintenant on log
+        //  CORRIGÉ: Résultat ignoré silencieusement avant — maintenant on log
         try {
             sessionService.endSession(email);
-            log.info("✅ Session terminée pour {}", email);
+            log.info(" Session terminée pour {}", email);
             return ResponseEntity.ok(Map.of("success", true, "message", "Session terminée"));
         } catch (Exception e) {
             log.error("Erreur fermeture session pour {}: {}", email, e.getMessage());
@@ -161,7 +161,7 @@ public class UserSessionController {
 
         try {
             sessionService.endSession(email);
-            log.info("✅ Session fermée par expiration token pour {}", email);
+            log.info(" Session fermée par expiration token pour {}", email);
             return ResponseEntity.ok(Map.of("success", true));
         } catch (Exception e) {
             log.error("Erreur fermeture session expirée pour {}: {}", email, e.getMessage());

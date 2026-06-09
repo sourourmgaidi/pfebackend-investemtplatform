@@ -53,7 +53,7 @@ public class EmailAgentController {
         return roles != null && roles.contains("ADMIN");
     }
 
-    // ── Import CSV ────────────────────────────────────────────────────────────
+    // ── Import CSV
     @PostMapping("/import")
     public ResponseEntity<?> importCsv(@AuthenticationPrincipal Jwt jwt,
                                        @RequestParam("file") MultipartFile file) {

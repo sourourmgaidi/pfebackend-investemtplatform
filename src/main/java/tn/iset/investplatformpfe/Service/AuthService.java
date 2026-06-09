@@ -257,13 +257,13 @@ public class AuthService {
         String firstName = (String) userData.get("firstName");
         String lastName = (String) userData.get("lastName");
 
-        // ✅ VALIDATIONS OBLIGATOIRES
+        //  VALIDATIONS OBLIGATOIRES
         validateEmail(email);
         validateRequiredString(firstName, "firstName");
         validateRequiredString(lastName, "lastName");
         validatePassword(password);
 
-        // ✅ VALIDATIONS OPTIONNELLES
+        //  VALIDATIONS OPTIONNELLES
         validatePhone((String) userData.get("phone"));
         validateWebsite((String) userData.get("website"));
         validateLinkedin((String) userData.get("linkedinProfile"));
@@ -468,7 +468,7 @@ public class AuthService {
         Investor existing = investorRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("Utilisateur non trouvé"));
 
-        // ✅ VALIDATIONS SUR LES CHAMPS ENVOYÉS
+        //  VALIDATIONS SUR LES CHAMPS ENVOYÉS
         if (userData.containsKey("phone"))
             validatePhone((String) userData.get("phone"));
 
@@ -522,7 +522,7 @@ public class AuthService {
                 newEmail = (String) userData.get("email");
 
                 if (!newEmail.equals(existing.getEmail())) {
-                    // ✅ VALIDATION GMAIL POUR LE NOUVEL EMAIL
+                    //  VALIDATION GMAIL POUR LE NOUVEL EMAIL
                     if (!isGmail(newEmail)) {
                         throw new RuntimeException("Le nouvel email doit être une adresse Gmail valide");
                     }
